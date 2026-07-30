@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Calculator body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,28h36a4,4 0 0 1 4,4v44a4,4 0 0 1 -4,4H36a4,4 0 0 1 -4,-4V32a4,4 0 0 1 4,-4z" />
+    <!-- Screen -->
+    <path
+        android:fillColor="#FF9500"
+        android:pathData="M38,34h32v12h-32z" />
+    <!-- Keys -->
+    <path
+        android:fillColor="#FF9500"
+        android:pathData="M38,52h8v8h-8zM50,52h8v8h-8zM62,52h8v8h-8zM38,64h8v8h-8zM50,64h8v8h-8zM62,64h8v8h-8z" />
+</vector>
