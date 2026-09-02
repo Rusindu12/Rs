@@ -1,3 +1,9 @@
+# Rs Calculator — APK build pipeline.
+#
+# GitHub only executes workflows that live in `.github/workflows/`. Run
+# `./ci/enable-workflow.sh --push` (or copy this file there in the web editor) once,
+# then every push produces an installable debug APK and publishes it to the
+# `latest-apk` release.
 name: Build APK
 
 # Every push (and every manual run) builds a debug APK, runs the unit tests and

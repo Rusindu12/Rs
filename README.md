@@ -4,7 +4,9 @@ A modern Android calculator app built with **Kotlin** and **Jetpack Compose** (M
 
 ## 📱 Download the APK
 
-Every push builds an installable debug APK on GitHub Actions and attaches it to a rolling release:
+`ci/apk.yml` (GitHub Actions) builds an installable debug APK on every push and attaches it to a
+rolling release. Once that workflow is enabled (see [CI: automatic APK on every push](#ciautomatic-apk-on-every-push)),
+this link always gives you the newest build:
 
 **<https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk>**
 
@@ -77,11 +79,24 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`
 
 ### CI: automatic APK on every push
 
-`.github/workflows/apk.yml` runs the unit tests, builds `app-debug.apk`, uploads it as a
-workflow artefact (*Rs-Calculator-debug-apk*, kept 90 days) and publishes it to the
-[`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk) so the same
-download link always points at the newest build. Trigger it manually from
-**Actions → Build APK → Run workflow**.
+`ci/apk.yml` is the CI definition: it runs the unit tests, builds `app-debug.apk`, uploads it as
+a workflow artefact (*Rs-Calculator-debug-apk*, kept 90 days) and publishes it to the
+[`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk), so one stable
+download link always points at the newest build.
+
+GitHub only runs workflows that live in `.github/workflows/`, and only the repo owner may add
+files there. **One-time activation** — pick either option:
+
+| Where | What to do |
+|-------|------------|
+| In the browser | [Create the file here](https://github.com/Rusindu12/Rs/new/main?filename=.github/workflows/apk.yml), paste the contents of [`ci/apk.yml`](ci/apk.yml), **Commit** |
+| On your own PC | `./ci/enable-workflow.sh --push` (copies it to `.github/workflows/`, commits, pushes) |
+
+Then check **Settings → Actions → General**: *Actions permissions* → “Allow all actions and
+reusable workflows”, and *Workflow permissions* → “Read and write permissions” (needed to publish
+the release). After that every push builds an APK; you can also start one manually from
+**Actions → Build APK → Run workflow**. The job summary prints a QR code — point your phone
+camera at it and the APK starts downloading.
 
 ### Building a release APK
 
