@@ -171,6 +171,18 @@ jobs:
             exit 0
           fi
 
+          # The rolling tag must follow the build that is published, otherwise "source code"
+          # links on the release page point at an older commit than the APK.
+          tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | cut -f1)"
+          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+            if git push -f origin "refs/tags/$RELEASE_TAG" 2>>"$RUNNER_TEMP/err"; then
+              echo "✓ moved ${RELEASE_TAG} ${tag_sha:0:7}… → ${GITHUB_SHA:0:7}…"
+            else
+              echo "::warning::could not move the ${RELEASE_TAG} tag: $(tail -n 2 "$RUNNER_TEMP/err" | tr '\n' ' ')"
+            fi
+          fi
+
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
 
           {
