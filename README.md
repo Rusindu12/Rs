@@ -2,6 +2,18 @@
 
 A modern Android calculator app built with **Kotlin** and **Jetpack Compose** (Material 3).
 
+## 📱 Download the APK
+
+Every push builds an installable debug APK on GitHub Actions and attaches it to a rolling release:
+
+**<https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk>**
+
+Open that link on the phone → allow “install from unknown sources” when Android asks → done.
+Full build history and other artefacts: [Actions → Build APK](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml).
+
+> The APK is signed with the Android *debug* key, so it is meant for personal testing —
+> not for Play Store upload. See [Building a release APK](#building-a-release-apk).
+
 ## Features
 
 - Full expression input — type a whole expression like `12×(4+8)−50%` and evaluate it at once
@@ -54,7 +66,62 @@ Open the project folder in Android Studio and press **Run**, or from the command
 ./gradlew test                 # run the unit tests
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+or let the helper script do it (runs the tests, builds, copies the APK to `out/`):
+
+```bash
+./scripts/build-apk.sh            # add --install to adb-install it on a connected phone
+```
+
+The APK is written to `app/build/outputs/apk/debug/app-debug.apk`
+(and `out/Rs-Calculator-debug.apk` by the script).
+
+### CI: automatic APK on every push
+
+`.github/workflows/apk.yml` runs the unit tests, builds `app-debug.apk`, uploads it as a
+workflow artefact (*Rs-Calculator-debug-apk*, kept 90 days) and publishes it to the
+[`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk) so the same
+download link always points at the newest build. Trigger it manually from
+**Actions → Build APK → Run workflow**.
+
+### Building a release APK
+
+Debug builds are fine for testing, but a release build is smaller and faster.
+Create a keystore once, then point `keystore.properties` at it:
+
+```bash
+keytool -genkeypair -v -keystore rs-release.jks -alias rs -keyalg RSA -keysize 2048 -validity 10000
+```
+
+```properties
+# keystore.properties  (do not commit — *.jks / *.keystore are already ignored)
+storeFile=../rs-release.jks
+storePassword=…
+keyAlias=rs
+keyPassword=…
+```
+
+Add this to `android { }` in `app/build.gradle.kts`, then run `./gradlew assembleRelease`:
+
+```kotlin
+signingConfigs {
+    create("release") {
+        val p = java.util.Properties().apply {
+            rootProject.file("keystore.properties").inputStream().use { load(it) }
+        }
+        storeFile = rootProject.file(p.getProperty("storeFile"))
+        storePassword = p.getProperty("storePassword")
+        keyAlias = p.getProperty("keyAlias")
+        keyPassword = p.getProperty("keyPassword")
+    }
+}
+buildTypes {
+    release {
+        isMinifyEnabled = true
+        isShrinkResources = true
+        signingConfig = signingConfigs.getByName("release")
+    }
+}
+```
 
 ## Supported expression syntax
 

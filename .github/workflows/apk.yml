@@ -1,0 +1,130 @@
+name: Build APK
+
+# Every push (and every manual run) builds a debug APK, runs the unit tests and
+# publishes the APK on the repository Releases page so it can be installed on a
+# phone straight away.
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK: app/build/outputs/apk/debug/app-debug.apk
+  RELEASE_TAG: latest-apk
+  APK_ASSET: Rs-Calculator.apk
+
+jobs:
+  apk:
+    name: Assemble installable APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Unit tests (engine + reducer)
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Collect build info
+        id: info
+        run: |
+          set -euo pipefail
+          test -f "$APK" || { echo "::error::APK was not produced"; exit 1; }
+          SIZE=$(du -h "$APK" | cut -f1)
+          SHA=$(sha256sum "$APK" | cut -c1-16)
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Built $APK ($SIZE)"
+
+      - name: Upload APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rs-Calculator-debug-apk
+          path: ${{ env.APK }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish APK on the Releases page
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIZE: ${{ steps.info.outputs.size }}
+          SHA: ${{ steps.info.outputs.sha }}
+        run: |
+          set -uo pipefail
+
+          notes="$RUNNER_TEMP/notes.md"
+          cat > "$notes" <<EOF
+          Rs Calculator — auto-built **debug** APK (\`${GITHUB_SHA::7}\`).
+
+          * Size: ${SIZE} · sha256 \`${SHA}...\`
+          * Signed with the Android debug key — install it directly on any device (Android 7.0+, API 24+).
+          * Re-installing over a previously installed build: uninstall the old one first if the signature changed.
+
+          | File | Description |
+          |------|-------------|
+          | \`Rs-Calculator.apk\` | debug build, ready to install |
+
+          > Built by \`.github/workflows/apk.yml\` on every push.
+          EOF
+
+          if ! gh release create "$RELEASE_TAG" "$APK#$APK_ASSET" \
+                --title "Rs Calculator — APK" \
+                --notes-file "$notes" \
+                --target "$GITHUB_SHA" 2>"$RUNNER_TEMP/err"; then
+            # The release already exists from a previous run: replace the asset.
+            gh release edit "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" --latest
+            if ! gh release upload "$RELEASE_TAG" "$APK#$APK_ASSET" --clobber 2>>"$RUNNER_TEMP/err"; then
+              echo "::warning::Could not publish the APK to Releases. $(tail -n 3 "$RUNNER_TEMP/err" | tr '\n' ' ')"
+              echo "::warning::If the token is read-only, enable Settings → Actions → General → Workflow permissions → 'Read and write permissions'."
+              echo "The APK is still available in this run's Artifacts section (Rs-Calculator-debug-apk)."
+              exit 0
+            fi
+          fi
+
+          echo "### 📱 APK published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download & install on your phone: **<https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}>**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Release page: <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}> · size ${SIZE}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add a QR code for phone install
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
+          python3 -m pip install --quiet --user segno 2>/dev/null || python3 -m pip install --quiet segno || exit 0
+          python3 - "$url" <<'PY'
+          import sys, segno
+          qr = segno.make(sys.argv[1], error='m')
+          print("Scan with your phone camera to download the APK:")
+          qr.terminal(compact=True, dark="  ", light="██")
+          PY
