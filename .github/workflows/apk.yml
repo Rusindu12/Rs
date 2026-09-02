@@ -14,6 +14,15 @@ on:
       - 'arena/**'
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Update the rolling latest-apk release (so the QR / download link works)'
+        type: boolean
+        default: true
+      drop_apk_branch:
+        description: 'Also push the APK to the throwaway `apk-drop` branch (git-only download path)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -94,9 +103,11 @@ jobs:
           retention-days: 90
 
       - name: Publish APK on the Releases page
-        # Only the default branch feeds the rolling `latest-apk` release; other branches
-        # still get their own artefact under the run's Artifacts section.
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        # Automatic runs feed the rolling `latest-apk` release from the default branch only;
+        # other branches/PRs keep their artefact. A manual run can publish from any branch.
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           SIZE: ${{ steps.info.outputs.size }}
@@ -142,6 +153,37 @@ jobs:
             echo ""
             echo "Release page: <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}> · size ${SIZE} · sha256 \`${SHA}...\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Release assets and workflow artefacts are served from hosts that sandboxed/offline
+      # tooling often cannot reach (302 → *.blob.core.windows.net). Git over github.com is
+      # usually allowed, so a manual run can also drop the APK on a throwaway branch.
+      - name: Drop APK on the throwaway apk-drop branch
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.drop_apk_branch == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGED: ${{ steps.info.outputs.path }}
+        run: |
+          set -euo pipefail
+          drop="$RUNNER_TEMP/apk-drop"
+          git init -q "$drop"
+          cd "$drop"
+          mkdir -p apk
+          cp "$STAGED" apk/Rs-Calculator-debug.apk
+          ( cd apk && sha256sum Rs-Calculator-debug.apk > SHA256SUMS.txt )
+          cat > apk/BUILD_INFO.txt <<EOF
+          built by .github/workflows/apk.yml (workflow_dispatch)
+          commit: ${GITHUB_SHA}
+          run:    ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          size:   $(du -h apk/Rs-Calculator-debug.apk | cut -f1)
+          EOF
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f -A
+          git commit -qm "APK drop: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              HEAD:refs/heads/apk-drop
+          echo "✓ pushed apk/Rs-Calculator-debug.apk to refs/heads/apk-drop"
+          echo "  (delete it later: git push origin --delete apk-drop)"
 
       - name: Add a QR code for phone install
         if: github.event_name != 'pull_request'

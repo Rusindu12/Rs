@@ -121,7 +121,14 @@ apart (`cp ci/apk.yml .github/workflows/apk.yml` after editing). Every run:
 5. prints a QR code in the job summary for phone installs.
 
 If the release step cannot write (read-only workflow token), the run still succeeds and says so in a
-warning — grab the artefact instead. To activate the pipeline from a terminal on your own machine:
+warning — grab the artefact instead.
+
+**Need an APK right now, from any branch?** Run
+[Actions → Build APK → Run workflow](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml)
+on that branch: both checkboxes are on by default, so you get the `latest-apk` link *and* a
+`apk/Rs-Calculator-debug.apk` file on the throwaway `apk-drop` branch — handy for environments that
+can only speak git (release assets and artefacts are served from a different host, which some CI
+sandboxes block). Clean up afterwards with `git push origin --delete apk-drop`. To activate the pipeline from a terminal on your own machine:
 
 ```bash
 ./ci/enable-workflow.sh --push   # copies ci/apk.yml into .github/workflows/, commits and pushes
