@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # One-time setup: copy the CI definition into .github/workflows so GitHub runs it.
-# (The Arena agent's GitHub App is not allowed to push files into .github/workflows,
-#  so this has to be done by the repository owner.)
+#
+# `.github/workflows/apk.yml` is already committed on the current branch, so normally you only have
+# to merge that PR — this script is for rebuilding the copy by hand (e.g. after editing ci/apk.yml).
+# Note: GitHub registers workflows from the *default* branch only, so the file has to reach `main`.
 #
 #   ./ci/enable-workflow.sh              # copy + commit on the current branch
 #   ./ci/enable-workflow.sh --push       # ... and push it to origin

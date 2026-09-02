@@ -4,14 +4,27 @@ A modern Android calculator app built with **Kotlin** and **Jetpack Compose** (M
 
 ## 📱 Download the APK
 
-`ci/apk.yml` (GitHub Actions) builds an installable debug APK on every push and attaches it to a
-rolling release. Once that workflow is enabled (see [CI: automatic APK on every push](#ciautomatic-apk-on-every-push)),
-this link always gives you the newest build:
+**APK එක අවශ්‍යද? — පියවර 2ක්.** (1) පහල one-time activation එක කරන්න, (2) ඊට පස්සේ හැම
+push එකකම `Rs-Calculator.apk` මේ link එකෙන් එනවා — phone එකෙන්ම open කරලා install කරන්න පුළුවන්.
 
-**<https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk>**
+```
+https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk
+```
 
-Open that link on the phone → allow “install from unknown sources” when Android asks → done.
-Full build history and other artefacts: [Actions → Build APK](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml).
+GitHub Actions has never run in this repository, so the pipeline has to be switched on **once**
+(workflow files must land on `main`, and only the repo owner can do that):
+
+| | What to do | Time |
+|---|---|---|
+| 1 | **Merge the open PR that adds [`.github/workflows/apk.yml`](https://github.com/Rusindu12/Rs/blob/main/.github/workflows/apk.yml)** — or, PR-free, [create that file in the browser](https://github.com/Rusindu12/Rs/new/main?filename=.github/workflows/apk.yml) and paste in [`ci/apk.yml`](https://github.com/Rusindu12/Rs/blob/main/ci/apk.yml) | ~30 s |
+| 2 | If GitHub shows the “Workflows aren’t being run on this repository” banner: **Actions** tab → **I understand my workflows, go ahead and enable them** → **Settings → Actions → General** → *Workflow permissions* = **Read and write permissions** (needed to publish the release) | ~20 s |
+
+The merge itself starts the first build (≈ 4–6 min of Gradle warm-up). When that run goes green the
+link above works, the job summary prints a **QR code** for the phone, and every later push rebuilds
+automatically. If you would rather not wait for CI: [build it locally](#build--run).
+
+Open the link on the phone → allow “install from unknown sources” when Android asks → done.
+Full build history and per-run artefacts: [Actions → Build APK](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml).
 
 > The APK is signed with the Android *debug* key, so it is meant for personal testing —
 > not for Play Store upload. See [Building a release APK](#building-a-release-apk).
@@ -24,7 +37,7 @@ Full build history and other artefacts: [Actions → Build APK](https://github.c
 - Percent, sign toggle (`+/−`), backspace and `AC`
 - **History sheet** — tap any past result to reuse it
 - Material 3 with dynamic color (Android 12+), light/dark theme, edge-to-edge layout
-- Adaptive launcher icon
+- Adaptive launcher icon (Android 8+), plus generated PNG fallbacks for older launchers
 - Pure-Kotlin, Android-free calculation core covered by unit tests
 
 ## Project structure
@@ -38,7 +51,22 @@ app/src/main/java/com/rusindu/calculator/
 ├── CalculatorEngine.kt      # Recursive-descent expression parser + formatting
 └── ui/theme/                # Material 3 theme and typography
 
+app/src/main/res/
+├── drawable/ic_launcher_foreground.xml   # adaptive-icon foreground (vector)
+├── mipmap-anydpi-v26/                    # adaptive + monochrome icon (API 26+)
+├── mipmap-{m,h,x,xx,xxx}dpi/ic_launcher{,_round}.png   # legacy bitmaps
+└── values[-night]/                       # light/dark window background + strings
+
 app/src/test/java/...        # Unit tests for the engine and the reducer
+ci/apk.yml                   # the workflow (also the reviewed copy of .github/workflows/apk.yml)
+scripts/build-apk.sh         # local build helper (tests → APK → out/)
+scripts/gen-icons.py         # regenerates the mipmap-*/ launcher PNGs
+```
+
+Regenerate the launcher bitmaps after changing the artwork:
+
+```bash
+python3 -m pip install pillow && python3 scripts/gen-icons.py
 ```
 
 The architecture is a simple unidirectional data flow:
@@ -75,28 +103,29 @@ or let the helper script do it (runs the tests, builds, copies the APK to `out/`
 ```
 
 The APK is written to `app/build/outputs/apk/debug/app-debug.apk`
-(and `out/Rs-Calculator-debug.apk` by the script).
+(and `out/Rs-Calculator-debug.apk` by the script). Install that file straight onto a phone with
+`./scripts/build-apk.sh --install`, or copy it over and open it.
 
 ### CI: automatic APK on every push
 
-`ci/apk.yml` is the CI definition: it runs the unit tests, builds `app-debug.apk`, uploads it as
-a workflow artefact (*Rs-Calculator-debug-apk*, kept 90 days) and publishes it to the
-[`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk), so one stable
-download link always points at the newest build.
+`.github/workflows/apk.yml` is the definition GitHub runs; [`ci/apk.yml`](ci/apk.yml) is the
+reviewed copy that lives in the project folder, and a CI step fails the build if the two drift
+apart (`cp ci/apk.yml .github/workflows/apk.yml` after editing). Every run:
 
-GitHub only runs workflows that live in `.github/workflows/`, and only the repo owner may add
-files there. **One-time activation** — pick either option:
+1. `testDebugUnitTest` — the engine and reducer tests,
+2. `assembleDebug` — the installable APK,
+3. uploads **`Rs-Calculator-debug-apk`** as a workflow artefact (90 days, every branch and PR),
+4. on the default branch only, replaces the asset on the rolling
+   [`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk) so
+   `…/releases/download/latest-apk/Rs-Calculator.apk` always points at the newest build,
+5. prints a QR code in the job summary for phone installs.
 
-| Where | What to do |
-|-------|------------|
-| In the browser | [Create the file here](https://github.com/Rusindu12/Rs/new/main?filename=.github/workflows/apk.yml), paste the contents of [`ci/apk.yml`](ci/apk.yml), **Commit** |
-| On your own PC | `./ci/enable-workflow.sh --push` (copies it to `.github/workflows/`, commits, pushes) |
+If the release step cannot write (read-only workflow token), the run still succeeds and says so in a
+warning — grab the artefact instead. To activate the pipeline from a terminal on your own machine:
 
-Then check **Settings → Actions → General**: *Actions permissions* → “Allow all actions and
-reusable workflows”, and *Workflow permissions* → “Read and write permissions” (needed to publish
-the release). After that every push builds an APK; you can also start one manually from
-**Actions → Build APK → Run workflow**. The job summary prints a QR code — point your phone
-camera at it and the APK starts downloading.
+```bash
+./ci/enable-workflow.sh --push   # copies ci/apk.yml into .github/workflows/, commits and pushes
+```
 
 ### Building a release APK
 
