@@ -128,7 +128,17 @@ warning — grab the artefact instead.
 on that branch: both checkboxes are on by default, so you get the `latest-apk` link *and* a
 `apk/Rs-Calculator-debug.apk` file on the throwaway `apk-drop` branch — handy for environments that
 can only speak git (release assets and artefacts are served from a different host, which some CI
-sandboxes block). Clean up afterwards with `git push origin --delete apk-drop`. To activate the pipeline from a terminal on your own machine:
+sandboxes block). Clean up afterwards with `git push origin --delete apk-drop`.
+
+A **push** can trigger the same thing when `workflow_dispatch` is not available (a GitHub App token
+gets a 403): put `[publish-apk]` in the commit subject, e.g.
+
+```bash
+git commit --allow-empty -m "ci: [publish-apk] rebuild the APK" && git push
+```
+
+The run decides in its first steps (`Decide what this run publishes`) and the two extra steps are
+skipped for every other run, so ordinary pushes still only build + upload the artefact. To activate the pipeline from a terminal on your own machine:
 
 ```bash
 ./ci/enable-workflow.sh --push   # copies ci/apk.yml into .github/workflows/, commits and pushes
