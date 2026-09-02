@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.RsCalculator" parent="android:Theme.Material.NoActionBar" />
+    <!--
+      The activity draws everything with Compose; this theme only decides what
+      the window looks like for the split second before the first frame, so it
+      must match the app background to avoid a flash. Light values here, dark in
+      values-night/.
+    -->
+    <style name="Theme.RsCalculator" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>

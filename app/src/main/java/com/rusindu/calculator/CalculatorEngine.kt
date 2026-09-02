@@ -1,5 +1,6 @@
 package com.rusindu.calculator
 
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.pow
@@ -71,7 +72,7 @@ object CalculatorEngine {
 
         val magnitude = abs(value)
         if (magnitude >= 1e12 || magnitude < 1e-9) {
-            return String.format("%.6E", value)
+            return String.format(Locale.US, "%.6E", value)
                 .replace("E", "e")
                 .replace(Regex("0+e"), "e")
                 .replace(Regex("\\.e"), "e")
@@ -82,7 +83,10 @@ object CalculatorEngine {
             return groupThousands(rounded.roundToLong().toString())
         }
 
-        var text = String.format("%.10f", rounded).trimEnd('0').trimEnd('.')
+        // Always format with the US locale: the result is put back into the
+        // expression when the user reuses it from history, and the parser only
+        // understands '.' as the decimal separator.
+        var text = String.format(Locale.US, "%.10f", rounded).trimEnd('0').trimEnd('.')
         val negative = text.startsWith("-")
         if (negative) text = text.substring(1)
         val parts = text.split(".")
