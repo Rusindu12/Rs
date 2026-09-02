@@ -161,7 +161,8 @@ jobs:
           # Create the rolling release once, then keep replacing its asset.
           gh release create "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" \
                 --target "$GITHUB_SHA" --latest 2>"$RUNNER_TEMP/err" \
-            || gh release edit "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" --latest 2>>"$RUNNER_TEMP/err" \
+            || gh release edit "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" \
+                 --latest --target "$GITHUB_SHA" 2>>"$RUNNER_TEMP/err" \
             || true
 
           if ! gh release upload "$RELEASE_TAG" "$STAGED" --clobber 2>>"$RUNNER_TEMP/err"; then
