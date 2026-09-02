@@ -73,6 +73,35 @@ jobs:
             echo "✓ no duplicate copy to keep in sync"
           fi
 
+      # Decide what this run is allowed to publish. Triggers, in words:
+      #   push to main            → update the rolling release
+      #   commit subject [publish-apk] → update the release *and* drop the APK on `apk-drop`
+      #   manual run              → whatever the two checkboxes say
+      - name: Decide what this run publishes
+        id: mode
+        run: |
+          set -uo pipefail
+          event="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          subject="$(git log -1 --pretty=%s)"
+          pub_in="${{ github.event.inputs.publish_release }}"
+          drop_in="${{ github.event.inputs.drop_apk_branch }}"
+          publish=false
+          drop=false
+          if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then
+            publish=true
+          fi
+          case "$subject" in
+            *"[publish-apk]"*) publish=true; drop=true ;;
+          esac
+          if [ "$event" = "workflow_dispatch" ]; then
+            if [ "$pub_in" = "true" ]; then publish=true; fi
+            if [ "$drop_in" = "true" ]; then drop=true; fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "drop=$drop" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish drop=$drop (event=$event, subject: $subject)"
+
       - name: Unit tests (engine + reducer)
         run: ./gradlew --no-daemon testDebugUnitTest
 
@@ -105,9 +134,7 @@ jobs:
       - name: Publish APK on the Releases page
         # Automatic runs feed the rolling `latest-apk` release from the default branch only;
         # other branches/PRs keep their artefact. A manual run can publish from any branch.
-        if: >-
-          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
+        if: steps.mode.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SIZE: ${{ steps.info.outputs.size }}
@@ -158,7 +185,7 @@ jobs:
       # tooling often cannot reach (302 → *.blob.core.windows.net). Git over github.com is
       # usually allowed, so a manual run can also drop the APK on a throwaway branch.
       - name: Drop APK on the throwaway apk-drop branch
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.drop_apk_branch == 'true'
+        if: steps.mode.outputs.drop == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           STAGED: ${{ steps.info.outputs.path }}
@@ -186,7 +213,7 @@ jobs:
           echo "  (delete it later: git push origin --delete apk-drop)"
 
       - name: Add a QR code for phone install
-        if: github.event_name != 'pull_request'
+        if: steps.mode.outputs.publish == 'true'
         continue-on-error: true
         run: |
           set -uo pipefail
