@@ -85,7 +85,26 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee build.log
+
+      # Sandboxes that can only speak git can fetch refs/heads/ci-debug to read it.
+      - name: Drop build log on failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if [ -f trading-bot/android/build.log ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout --detach -q
+            tail -c 300000 trading-bot/android/build.log > ci-build-log.txt
+            git add -f ci-build-log.txt
+            git commit -qm "ci build log: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+            git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/ci-debug
+            echo "log pushed to refs/heads/ci-debug"
+          fi
 
       - name: Collect build info
         id: info
