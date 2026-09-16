@@ -1,0 +1,198 @@
+# AI Trading Bot — APK build pipeline (trading-bot/).
+#
+# Independent of the legacy calculator workflow (ci/apk.yml). Every push builds
+# the React Native (Expo) app: typecheck → unit tests → native Android APK.
+# Pushes to main publish the APK to the rolling `trading-bot-apk` release so
+#   https://github.com/Rusindu12/Rs/releases/download/trading-bot-apk/AI-Trading-Bot.apk
+# always points at the newest build.
+name: Build Trading Bot APK
+
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - 'trading-bot/**'
+      - '.github/workflows/apk-trading-bot.yml'
+  pull_request:
+    paths:
+      - 'trading-bot/**'
+      - '.github/workflows/apk-trading-bot.yml'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Update the rolling trading-bot-apk release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: trading-bot-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK: trading-bot/android/app/build/outputs/apk/debug/app-debug.apk
+  RELEASE_TAG: trading-bot-apk
+  APK_ASSET: AI-Trading-Bot.apk
+
+jobs:
+  apk:
+    name: Test + assemble debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: trading-bot
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: trading-bot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (indicators · signal engine · risk · crypto · Binance client)
+        run: npm test
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild -p android --no-install
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Collect build info
+        id: info
+        run: |
+          set -euo pipefail
+          test -f "$APK" || { echo "::error::APK was not produced"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/publish"
+          cp "$APK" "$RUNNER_TEMP/publish/$APK_ASSET"
+          SIZE=$(du -h "$RUNNER_TEMP/publish/$APK_ASSET" | cut -f1)
+          SHA=$(sha256sum "$RUNNER_TEMP/publish/$APK_ASSET" | cut -c1-16)
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/publish/$APK_ASSET" >> "$GITHUB_OUTPUT"
+          echo "Built $APK ($SIZE)"
+
+      - name: Upload APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Trading-Bot-debug-apk
+          path: ${{ steps.info.outputs.path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      # Publish on: pushes to main, commit subjects containing [publish-apk],
+      # or a manual run with the checkbox ticked.
+      - name: Decide what this run publishes
+        id: mode
+        run: |
+          set -uo pipefail
+          event="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          subject="$(git log -1 --pretty=%s)"
+          pub_in="${{ github.event.inputs.publish_release }}"
+          publish=false
+          if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then publish=true; fi
+          case "$subject" in *"[publish-apk]"*) publish=true ;; esac
+          if [ "$event" = "workflow_dispatch" ] && [ "$pub_in" = "true" ]; then publish=true; fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish (event=$event, subject: $subject)"
+
+      - name: Publish APK on the Releases page
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIZE: ${{ steps.info.outputs.size }}
+          SHA: ${{ steps.info.outputs.sha }}
+          STAGED: ${{ steps.info.outputs.path }}
+        run: |
+          set -uo pipefail
+          cd "$GITHUB_WORKSPACE"  # gh needs a git repo context
+
+          notes="$RUNNER_TEMP/notes.md"
+          cat > "$notes" <<EOF
+          AI Trading Bot — auto-built **debug** APK (\`${GITHUB_SHA::7}\`).
+
+          * Size: ${SIZE} · sha256 \`${SHA}...\`
+          * Signed with the Android debug key — install directly on any device (Android 7.0+, API 24+).
+          * React Native (Expo) · Binance REST + WebSocket · AI signal engine verified by \`npm test\` before every build.
+          * Re-installing over an older build of a *different* app (e.g. the calculator)? Uninstall it first if Android complains about signatures.
+
+          | File | Description |
+          |------|-------------|
+          | \`${APK_ASSET}\` | debug build, ready to install |
+
+          > ⚠️ Trading crypto is risky — start on **testnet**. Built by \`.github/workflows/apk-trading-bot.yml\`.
+          EOF
+
+          gh release create "$RELEASE_TAG" --title "AI Trading Bot — APK" --notes-file "$notes" \
+                --target "$GITHUB_SHA" --latest 2>"$RUNNER_TEMP/err" \
+            || gh release edit "$RELEASE_TAG" --title "AI Trading Bot — APK" --notes-file "$notes" \
+                 --latest --target "$GITHUB_SHA" 2>>"$RUNNER_TEMP/err" \
+            || true
+
+          if ! gh release upload "$RELEASE_TAG" "$STAGED" --clobber 2>>"$RUNNER_TEMP/err"; then
+            echo "::warning::Could not publish the APK to Releases. $(tail -n 3 "$RUNNER_TEMP/err" | tr '\n' ' ')"
+            echo "::warning::If the token is read-only, enable Settings → Actions → General → Workflow permissions → 'Read and write permissions'."
+            echo "The APK is still available in this run's Artifacts section (AI-Trading-Bot-debug-apk)."
+            exit 0
+          fi
+
+          tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | cut -f1)"
+          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+            git push -f origin "refs/tags/$RELEASE_TAG" 2>>"$RUNNER_TEMP/err" \
+              || echo "::warning::could not move the ${RELEASE_TAG} tag"
+          fi
+
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
+          {
+            echo "### 📱 AI Trading Bot APK published"
+            echo ""
+            echo "Download & install on your phone: **<${url}>**"
+            echo ""
+            echo "Release page: <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}> · size ${SIZE} · sha256 \`${SHA}...\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add a QR code for phone install
+        if: steps.mode.outputs.publish == 'true'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          cd "$GITHUB_WORKSPACE"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
+          python3 -m pip install --quiet segno
+          python3 - "$url" <<'PY'
+          import sys, segno
+          qr = segno.make(sys.argv[1], error='m')
+          print("Scan with your phone camera to download the APK:")
+          qr.terminal(compact=True, dark="  ", light="██")
+          PY

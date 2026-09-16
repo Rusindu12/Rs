@@ -1,198 +1,169 @@
-# Rs Calculator
+# 🤖 AI Trading Bot (Android)
 
-A modern Android calculator app built with **Kotlin** and **Jetpack Compose** (Material 3).
+A complete **React Native (Expo)** Android app that connects to the **Binance API** for live
+cryptocurrency trading, powered by an on-device **AI signal engine** (7 scored factors,
+10 technical indicators, 5-timeframe confluence) with a full risk-management layer.
+
+> ⚠️ **Disclaimer** — trading cryptocurrency is highly volatile and can lose money. This app is
+> educational software, not financial advice. It defaults to **Binance Testnet**: start there,
+> use small sizes, and never trade money you cannot afford to lose.
 
 ## 📱 Download the APK
 
-**APK එක අවශ්‍යද? — පියවර 2ක්.** (1) පහල one-time activation එක කරන්න, (2) ඊට පස්සේ හැම
-push එකකම `Rs-Calculator.apk` මේ link එකෙන් එනවා — phone එකෙන්ම open කරලා install කරන්න පුළුවන්.
+After the workflow lands on `main` (or a manual *Actions → Build Trading Bot APK → Run workflow*
+with “publish” ticked), the rolling release always holds the newest build:
 
 ```
-https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk
+https://github.com/Rusindu12/Rs/releases/download/trading-bot-apk/AI-Trading-Bot.apk
 ```
 
-GitHub Actions has never run in this repository, so the pipeline has to be switched on **once**
-(workflow files must land on `main`, and only the repo owner can do that):
-
-| | What to do | Time |
-|---|---|---|
-| 1 | **Merge the open PR that adds [`.github/workflows/apk.yml`](https://github.com/Rusindu12/Rs/blob/main/.github/workflows/apk.yml)** — or, PR-free, [create that file in the browser](https://github.com/Rusindu12/Rs/new/main?filename=.github/workflows/apk.yml) and paste in [`ci/apk.yml`](https://github.com/Rusindu12/Rs/blob/main/ci/apk.yml) | ~30 s |
-| 2 | If GitHub shows the “Workflows aren’t being run on this repository” banner: **Actions** tab → **I understand my workflows, go ahead and enable them** → **Settings → Actions → General** → *Workflow permissions* = **Read and write permissions** (needed to publish the release) | ~20 s |
-
-The merge itself starts the first build (≈ 4–6 min of Gradle warm-up). When that run goes green the
-link above works, the job summary prints a **QR code** for the phone, and every later push rebuilds
-automatically. If you would rather not wait for CI: [build it locally](#build--run).
-
-Open the link on the phone → allow “install from unknown sources” when Android asks → done.
-Full build history and per-run artefacts: [Actions → Build APK](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml).
-
-> The APK is signed with the Android *debug* key, so it is meant for personal testing —
-> not for Play Store upload. See [Building a release APK](#building-a-release-apk).
+Open it on your phone → allow “install from unknown sources” → done. Debug-signed, Android 7.0+.
+The pipeline runs **typecheck + 65 unit tests before every build**, so a green build means a
+verified engine.
 
 ## Features
 
-- Full expression input — type a whole expression like `12×(4+8)−50%` and evaluate it at once
-- **Live preview** of the result while you type
-- Correct operator precedence, parentheses (with auto-balancing on `=`), and implicit multiplication (`2(3+4)`)
-- Percent, sign toggle (`+/−`), backspace and `AC`
-- **History sheet** — tap any past result to reuse it
-- Material 3 with dynamic color (Android 12+), light/dark theme, edge-to-edge layout
-- Adaptive launcher icon (Android 8+), plus generated PNG fallbacks for older launchers
-- Pure-Kotlin, Android-free calculation core covered by unit tests
+### 1 · Authentication & setup
+- Binance **API key + secret** setup screen with format validation and a **connection status dot**
+- **Testnet ⇄ Live** toggle with an explicit red confirmation dialog for live trading
+- Credentials encrypted **on-device with AES-256-GCM**; the 256-bit master key lives in
+  **Android Keystore** (via `expo-secure-store`) — plaintext never touches disk
+- **Biometric lock** (fingerprint / face) with auto re-lock on backgrounding
+- REST reachability + websocket status indicators, live/testnet badges everywhere
+
+### 2 · Dashboard
+- Live portfolio value (USDT / BTC / ETH pills) from account balances marked to market
+- **P/L grid — daily / weekly / monthly / all-time** (realized + unrealized)
+- Active trades counter, engine tick status
+- **Top-10 price ticker** with SVG sparklines (`!miniTicker` websocket)
+- **AI confidence gauge** (0–100 %) and **market sentiment** (Bullish / Bearish / Neutral)
+- Quick actions: **Start Bot · Stop Bot · 🚨 Emergency Stop** (flattens everything + cancels orders)
+
+### 3 · AI trading engine
+Indicators computed in real time on every cycle, per symbol, per timeframe:
+
+| Indicator | Parameters | Role |
+|---|---|---|
+| RSI | 14 (Wilder) | scored factor (±20) |
+| MACD | 12 / 26 / 9 | scored factor (±15) |
+| Bollinger Bands | 20, 2σ | scored factor (±15) |
+| EMA stack | 9 / 21 / 50 / 200 | scored factor (±20) |
+| Volume confirmation | 20-avg, ×1.5 | scored factor (±10, trend-directional) |
+| Stochastic | 14 / 3 / 3 | scored factor (±10) |
+| **Multi-timeframe confluence** | 1m · 5m · 15m · 1h · 4h | scored factor (±15, capped mean) |
+| ATR | 14 (Wilder) | volatility context |
+| VWAP | rolling (HLCV) | context |
+| Ichimoku Cloud | 9 / 26 / 52, ±26 displacement | context |
+| Fibonacci retracement | swing high/low, 7 levels | context |
+| Volume Profile | 24 bins, POC + 70 % value area | context |
+
+Signal thresholds (exactly as designed):
+
+```
+score ≥ +60 → STRONG_BUY      score ≤ −60 → STRONG_SELL
+score ≥ +30 → BUY             score ≤ −30 → SELL
+otherwise   → HOLD            confidence = min(100, |score|)
+```
+
+Every signal card can be expanded into a **full breakdown**: each factor, its value and its exact
+point contribution, plus per-timeframe scores.
+
+### 4 · Live trading engine & risk management
+- **Paper mode** (default): simulated fills at live prices with 0.1 % taker fee and a local ledger
+- **Live mode**: real Binance spot **market orders** (HMAC-SHA256 signed, `recvWindow`, drift-synced timestamps)
+- Position sizing, **max-open-trades cap**, per-symbol one-position rule
+- **Stop-loss / take-profit** exits (configurable %) evaluated on every cycle
+- **Daily-loss circuit breaker** pauses new entries after repeated losses
+- Exits on **SL / TP / opposite signal / emergency stop**; every trade journaled with its reason
+- Positions, trades and equity survive app restarts (AsyncStorage)
 
 ## Project structure
 
 ```
-app/src/main/java/com/rusindu/calculator/
-├── MainActivity.kt          # Compose entry point
-├── CalculatorScreen.kt      # UI: display, keypad, history sheet
-├── CalculatorViewModel.kt   # StateFlow-backed state holder
-├── CalculatorState.kt       # State, actions and the pure reducer
-├── CalculatorEngine.kt      # Recursive-descent expression parser + formatting
-└── ui/theme/                # Material 3 theme and typography
-
-app/src/main/res/
-├── drawable/ic_launcher_foreground.xml   # adaptive-icon foreground (vector)
-├── mipmap-anydpi-v26/                    # adaptive + monochrome icon (API 26+)
-├── mipmap-{m,h,x,xx,xxx}dpi/ic_launcher{,_round}.png   # legacy bitmaps
-└── values[-night]/                       # light/dark window background + strings
-
-app/src/test/java/...        # Unit tests for the engine and the reducer
-ci/apk.yml                   # the workflow (also the reviewed copy of .github/workflows/apk.yml)
-scripts/build-apk.sh         # local build helper (tests → APK → out/)
-scripts/gen-icons.py         # regenerates the mipmap-*/ launcher PNGs
+trading-bot/
+├── App.tsx                        # boot → lock → setup → tabs
+├── app.json                       # Expo config (package com.rusindu.tradingbot)
+├── index.ts                       # entry + crypto.getRandomValues polyfill
+├── android/                       # committed native project (expo prebuild output)
+└── src/
+    ├── config.ts                  # endpoints, timeframes, defaults, storage keys
+    ├── theme.ts                   # Binance-style dark theme
+    ├── indicators/indicators.ts   # RSI MACD BB EMA Stoch ATR VWAP Ichimoku Fib VP (pure TS)
+    ├── engine/
+    │   ├── signalEngine.ts        # generate_signal — 7-factor scoring + context
+    │   ├── riskManager.ts         # sizing, caps, circuit breaker, SL/TP checks
+    │   ├── tradingBot.ts          # BotEngine — tick loop, positions, journal, buckets
+    │   ├── providers.ts           # PaperProvider / LiveProvider (market orders)
+    │   └── runtime.ts             # composition root (REST + WS + stores + engine)
+    ├── services/
+    │   ├── binance/rest.ts        # signed REST client (klines, account, orders)
+    │   ├── binance/ws.ts          # all-market mini-ticker stream + reconnect/watchdog
+    │   └── secureVault.ts         # AES-256-GCM credentials + Android Keystore
+    ├── crypto/primitives.ts       # HMAC-SHA256, AES-256-GCM, base64 (pure JS, Hermes-safe)
+    ├── store/                     # zustand stores (auth / market / bot)
+    ├── components/                # UI kit, sparklines, confidence gauge
+    ├── screens/                   # Setup · Lock · Dashboard · Signals · Trades · Settings
+    └── navigation/TabNavigator.tsx
 ```
 
-Regenerate the launcher bitmaps after changing the artwork:
-
-```bash
-python3 -m pip install pillow && python3 scripts/gen-icons.py
-```
-
-The architecture is a simple unidirectional data flow:
+The engine core is **pure TypeScript with injected ports** (market data, storage, clock,
+execution) — that’s why it’s unit-tested without a device:
 
 ```
-UI  ──CalculatorAction──▶  ViewModel  ──▶  CalculatorReducer (pure)
- ▲                                                  │
- └──────────────  CalculatorState  ◀────────────────┘
+$ npm test        # 65 tests: indicators, signal engine, risk, bot lifecycle, crypto, REST signing
+$ npm run typecheck
 ```
-
-Because `CalculatorEngine` and `CalculatorReducer` have no Android dependencies, all
-behaviour is testable with plain JVM unit tests.
-
-## Requirements
-
-- Android Studio Ladybug (or newer)
-- JDK 17
-- Android SDK 34 (`minSdk` 24, `targetSdk` 34)
 
 ## Build & run
 
-Open the project folder in Android Studio and press **Run**, or from the command line:
-
 ```bash
-./gradlew assembleDebug        # build a debug APK
-./gradlew installDebug         # build + install on a connected device/emulator
-./gradlew test                 # run the unit tests
+cd trading-bot
+npm install
+npm run typecheck && npm test       # verify the engine
+npx expo prebuild -p android --no-install
+cd android && ./gradlew assembleDebug
+# → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-or let the helper script do it (runs the tests, builds, copies the APK to `out/`):
+Or open `trading-bot/android` in Android Studio and press **Run**.
 
-```bash
-./scripts/build-apk.sh            # add --install to adb-install it on a connected phone
-```
+## CI: automatic APK on every push
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`
-(and `out/Rs-Calculator-debug.apk` by the script). Install that file straight onto a phone with
-`./scripts/build-apk.sh --install`, or copy it over and open it.
+`.github/workflows/apk-trading-bot.yml` (independent of the legacy calculator workflow):
 
-### CI: automatic APK on every push
+1. `npm run typecheck` + `npm test` — engine must be green,
+2. `expo prebuild` + `./gradlew assembleDebug`,
+3. uploads the **AI-Trading-Bot-debug-apk** artifact on every run,
+4. on `main` (or a `[publish-apk]` commit subject, or a manual run with the checkbox) it replaces
+   the asset on the rolling **`trading-bot-apk`** release and prints a QR code in the job summary.
 
-`.github/workflows/apk.yml` is the definition GitHub runs; [`ci/apk.yml`](ci/apk.yml) is the
-reviewed copy that lives in the project folder, and a CI step fails the build if the two drift
-apart (`cp ci/apk.yml .github/workflows/apk.yml` after editing). Every run:
+> First time only: merge the PR that adds the workflow to `main` and, if GitHub shows the
+> “workflows aren’t run” banner, enable Actions and set **Workflow permissions → Read and write**
+> so the release step can publish.
 
-1. `testDebugUnitTest` — the engine and reducer tests,
-2. `assembleDebug` — the installable APK,
-3. uploads **`Rs-Calculator-debug-apk`** as a workflow artefact (90 days, every branch and PR),
-4. on the default branch only, replaces the asset on the rolling
-   [`latest-apk` release](https://github.com/Rusindu12/Rs/releases/tag/latest-apk) so
-   `…/releases/download/latest-apk/Rs-Calculator.apk` always points at the newest build,
-5. prints a QR code in the job summary for phone installs.
+## Getting Binance API keys
 
-If the release step cannot write (read-only workflow token), the run still succeeds and says so in a
-warning — grab the artefact instead.
+1. **Testnet**: <https://testnet.binance.vision> → log in (GitHub account) → *Generate HMAC Keys*.
+   Free simulated funds, real market behaviour.
+2. **Live**: Binance → Profile → **API Management** → *Create API* → enable
+   **Enable Spot & Margin Trading** only. **Never enable withdrawals.** Restrict by IP if possible.
+3. Paste both keys into the app, keep the toggle on *Testnet (safe)*, press **Connect & Save**.
 
-**Need an APK right now, from any branch?** Run
-[Actions → Build APK → Run workflow](https://github.com/Rusindu12/Rs/actions/workflows/apk.yml)
-on that branch: both checkboxes are on by default, so you get the `latest-apk` link *and* a
-`apk/Rs-Calculator-debug.apk` file on the throwaway `apk-drop` branch — handy for environments that
-can only speak git (release assets and artefacts are served from a different host, which some CI
-sandboxes block). Clean up afterwards with `git push origin --delete apk-drop`.
+## Security model
 
-A **push** can trigger the same thing when `workflow_dispatch` is not available (a GitHub App token
-gets a 403): put `[publish-apk]` in the commit subject, e.g.
+- Keys are encrypted with AES-256-GCM; the master key is generated on first use and stored in
+  Android Keystore–backed storage (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`).
+- Biometric gate before any trading data is visible; auto re-lock on background.
+- The app only calls read + spot-order endpoints. Withdrawals, transfers and listing keys are
+  never used — and a withdrawal-enabled key would be rejected at setup (`canTrade` check only
+  passes for trading-enabled keys; always keep withdrawals disabled).
+- “Erase API keys from this device” wipes the encrypted blob and all local bot data.
 
-```bash
-git commit --allow-empty -m "ci: [publish-apk] rebuild the APK" && git push
-```
+---
 
-The run decides in its first steps (`Decide what this run publishes`) and the two extra steps are
-skipped for every other run, so ordinary pushes still only build + upload the artefact. To activate the pipeline from a terminal on your own machine:
+## 🧮 Legacy project: Rs Calculator
 
-```bash
-./ci/enable-workflow.sh --push   # copies ci/apk.yml into .github/workflows/, commits and pushes
-```
-
-### Building a release APK
-
-Debug builds are fine for testing, but a release build is smaller and faster.
-Create a keystore once, then point `keystore.properties` at it:
-
-```bash
-keytool -genkeypair -v -keystore rs-release.jks -alias rs -keyalg RSA -keysize 2048 -validity 10000
-```
-
-```properties
-# keystore.properties  (do not commit — *.jks / *.keystore are already ignored)
-storeFile=../rs-release.jks
-storePassword=…
-keyAlias=rs
-keyPassword=…
-```
-
-Add this to `android { }` in `app/build.gradle.kts`, then run `./gradlew assembleRelease`:
-
-```kotlin
-signingConfigs {
-    create("release") {
-        val p = java.util.Properties().apply {
-            rootProject.file("keystore.properties").inputStream().use { load(it) }
-        }
-        storeFile = rootProject.file(p.getProperty("storeFile"))
-        storePassword = p.getProperty("storePassword")
-        keyAlias = p.getProperty("keyAlias")
-        keyPassword = p.getProperty("keyPassword")
-    }
-}
-buildTypes {
-    release {
-        isMinifyEnabled = true
-        isShrinkResources = true
-        signingConfig = signingConfigs.getByName("release")
-    }
-}
-```
-
-## Supported expression syntax
-
-| Input | Meaning |
-|-------|---------|
-| `+ − × ÷` | basic arithmetic |
-| `( )` | grouping; unclosed brackets are auto-closed when you press `=` |
-| `%` | divides the preceding value by 100 (`200×10%` = `20`) |
-| `+/−` | negates the number currently being typed |
-| `2(3+4)` | implicit multiplication |
-
-Errors such as division by zero or a malformed expression are shown in red under the
-input instead of crashing or producing `NaN`.
+This repository previously shipped a Kotlin/Jetpack-Compose calculator. It is untouched and still
+builds via `.github/workflows/apk.yml`
+([latest calculator APK](https://github.com/Rusindu12/Rs/releases/download/latest-apk/Rs-Calculator.apk)).
+The `app/` directory is the calculator; `trading-bot/` is the AI Trading Bot above.
