@@ -110,6 +110,7 @@ jobs:
         id: info
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"  # job default working-directory is trading-bot/
           test -f "$APK" || { echo "::error::APK was not produced"; exit 1; }
           mkdir -p "$RUNNER_TEMP/publish"
           cp "$APK" "$RUNNER_TEMP/publish/$APK_ASSET"
