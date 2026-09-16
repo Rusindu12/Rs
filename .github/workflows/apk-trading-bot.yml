@@ -78,8 +78,8 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest ships the Android SDK with pre-accepted licences; Gradle
+      # auto-installs any missing platform/build-tools components.
 
       - name: Build debug APK
         run: |
