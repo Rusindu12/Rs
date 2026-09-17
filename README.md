@@ -68,7 +68,7 @@ Core spec factors (unchanged weights):
 Context (computed every cycle, shown in the breakdown): ATR volatility, VWAP position,
 Ichimoku cloud position, Fibonacci levels, Volume Profile POC + value area.
 
-### 🎓 AI v3 — real training (buy / hold / sell optimisation)
+### 🎓 AI v3.1 — real training (buy / hold / sell optimisation + risk)
 
 The engine is no longer hand-tuned — it is **trained**:
 
