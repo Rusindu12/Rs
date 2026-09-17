@@ -304,25 +304,22 @@ jobs:
       # NOTE: creating the Pages site needs a one-time owner action
       # (Settings → Pages → Source). These steps stay green either way and
       # take over automatically once Pages is enabled.
-      - name: Configure GitHub Pages
-        if: steps.mode.outputs.publish == 'true'
+      # The github-pages environment (default protection rules) only accepts
+      # deployments from the repository's default branch (main).
+      - name: Deploy to GitHub Pages (main branch only)
+        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v4
         with:
           enablement: true
-        continue-on-error: true
-
       - name: Upload Pages artifact
-        if: steps.mode.outputs.publish == 'true'
+        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: trading-bot/dist
-        continue-on-error: true
-
       - name: Deploy to GitHub Pages
         id: deployment
-        if: steps.mode.outputs.publish == 'true'
+        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
         uses: actions/deploy-pages@v4
-        continue-on-error: true
 
       - name: Push web build to the web-app branch
         if: steps.mode.outputs.publish == 'true'

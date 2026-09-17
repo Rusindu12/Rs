@@ -141,16 +141,17 @@ Or open `trading-bot/android` in Android Studio and press **Run**.
 > “workflows aren’t run” banner, enable Actions and set **Workflow permissions → Read and write**
 > so the release step can publish.
 
-## 🌐 Web app hosting (one-time, 30 seconds)
+## 🌐 Web app — three ways to run it (easiest first)
 
-CI publishes the web build to the **`web-app` branch** on every release run. To put it online,
-enable Pages **once** (only the repo owner can click this):
-
-> **Settings → Pages →** *Build and deployment* → **Source: Deploy from a branch** →
-> **Branch: `web-app`** / **/(root)** → **Save**
-
-The site then lives at **https://rusindu12.github.io/Rs/** and CI refreshes it on every build.
-(Alternatively pick *Source: GitHub Actions* — the workflow's deploy steps take over.)
+1. **Open instantly (zero setup):** the `web-app` branch is served by a global CDN —
+   <https://cdn.jsdelivr.net/gh/Rusindu12/Rs@web-app/index.html>
+   (branch updates appear within ~12 h; append `?v=2`-style cache-busters if needed).
+2. **Download & double-click:** the release carries **`AI-Trading-Bot.html`** — one
+   self-contained file (bundle inlined). Save it anywhere and open it in a browser;
+   it even works offline. Share it like a document.
+3. **GitHub Pages (nicest URL):** *Settings → Pages → Source: Deploy from a branch →
+   `web-app` /(root) → Save*, or simply merge the PR to `main` — CI then deploys the
+   site to **https://rusindu12.github.io/Rs/** automatically on every build.
 
 ## Getting Binance API keys
 
