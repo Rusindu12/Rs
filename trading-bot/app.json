@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.rusindu.tradingbot",
-      "versionCode": 5,
+      "versionCode": 6,
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",

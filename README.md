@@ -68,6 +68,29 @@ Core spec factors (unchanged weights):
 Context (computed every cycle, shown in the breakdown): ATR volatility, VWAP position,
 Ichimoku cloud position, Fibonacci levels, Volume Profile POC + value area.
 
+### 🎓 AI v3 — real training (buy / hold / sell optimisation)
+
+The engine is no longer hand-tuned — it is **trained**:
+
+1. **Data** — CI downloads ~1,000 bars × 5 timeframes of live Binance history for every
+   watchlist symbol before each build (`training/train.ts`, public endpoints, keyless).
+2. **Walk-forward optimisation** — 300+ candidate weight/threshold configs are replayed by a
+   fast backtester on 70 % of the data (no lookahead; fills at next-bar open, 0.1 % fees,
+   SL/TP simulation). Search: seeded random search + coordinate hill-climb.
+3. **Out-of-sample guard** — a candidate only ships if it *also* beats the spec defaults on
+   the untouched 30 % test segment; otherwise the safe spec defaults stay. No overfit shipping.
+4. **Graded decisions** — every BUY / SELL / HOLD decision is scored against the realised
+   move after an 8-bar horizon; per-class accuracies land in `training/REPORT.md`
+   (attached to every CI run summary) and inside the app (Settings → 🧠 AI Training).
+5. **On-device continual learning** — while the app runs, each emitted signal is resolved
+   2 hours later against the real price; contributing factors nudge ±0.02 within a bounded
+   0.6–1.4× band (`src/engine/adaptive.ts`). Weights = trained × adaptive, so the AI keeps
+   learning from its own results without ever drifting wild.
+
+Training artefacts: `src/engine/trainedWeights.json` (bundled into APK & web),
+`training/REPORT.md` (per-run metrics), parity + no-lookahead + guard tests in
+`__tests__/ai-training.test.ts`.
+
 **Smarter execution:**
 - **ATR-aware stops** — SL/TP widen with volatility (max 2× configured %) so volatile coins aren't clipped
 - **Confidence sizing** — positions scale 0.75×–1× with signal confidence (agreement-weighted: a score built from every factor aligning is trusted more than the same score from one factor)

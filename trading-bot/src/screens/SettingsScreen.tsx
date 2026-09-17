@@ -16,6 +16,9 @@ export function SettingsScreen() {
   const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
   const demoMode = useAuthStore((s) => s.demoMode);
   const hasCredentials = useAuthStore((s) => s.credentials) !== null;
+  const [learning, setLearning] = useState(runtime.learningSummary());
+
+  const refreshLearning = () => setLearning(runtime.learningSummary());
 
   const [forgetOpen, setForgetOpen] = useState(false);
   const [liveSwitch, setLiveSwitch] = useState(false);
@@ -146,6 +149,36 @@ export function SettingsScreen() {
         />
 
         <Button label="Save strategy" onPress={save} />
+      </Card>
+
+      {/* AI training */}
+      <Card>
+        <CardTitle right={<Badge text={learning.trained.adopted ? 'TRAINED ✓' : 'SPEC DEFAULTS'} tone={learning.trained.adopted ? 'buy' : 'neutral'} small />}>
+          🧠 AI TRAINING
+        </CardTitle>
+        <Row left="Last trained" right={new Date(learning.trained.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} />
+        <Row left="Training data" right={learning.trained.source === 'binance-live' ? 'live Binance history' : learning.trained.source} />
+        <Row
+          left="Decision accuracy (test)"
+          right={`${learning.trained.classAcc.toFixed(1)}%`}
+          rightStyle={{ color: colors.green, fontWeight: '800' }}
+        />
+        <Row left="BUY / SELL / HOLD accuracy" right={`${learning.trained.buyAcc != null ? learning.trained.buyAcc.toFixed(0) + '%' : '—'} / ${learning.trained.sellAcc != null ? learning.trained.sellAcc.toFixed(0) + '%' : '—'} / ${learning.trained.holdAcc != null ? learning.trained.holdAcc.toFixed(0) + '%' : '—'}`} />
+        <Row left="Live-learned signals" right={`${learning.adaptive.evaluated} evaluated · ${learning.adaptive.accuracy.toFixed(0)}% correct`} />
+        {Object.keys(learning.scales).length ? (
+          <Row
+            left="Adaptive factor scales"
+            right={Object.entries(learning.scales).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(2)}×`).join(' · ') + (Object.keys(learning.scales).length > 3 ? ' …' : '')}
+          />
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+          <Button label="⟳ Refresh" tone="ghost" onPress={refreshLearning} style={{ flex: 1 }} />
+          <Button label="Reset learning" tone="ghost" onPress={() => void runtime.resetAdaptive().then(refreshLearning)} style={{ flex: 1 }} />
+        </View>
+        <Text style={styles.toggleHint}>
+          Weights are re-trained on real Binance history in CI before every build, and keep
+          adapting on-device from each signal's outcome (bounded 0.6–1.4× so the AI can't drift wild).
+        </Text>
       </Card>
 
       {/* Security */}

@@ -10,6 +10,8 @@ import {
 import { BinanceRest } from '../services/binance/rest';
 import { MarketStreams, type MiniTicker } from '../services/binance/ws';
 import { BotEngine, memoryStorage, type BotLogPort } from './tradingBot';
+import { AdaptiveLearner, EMPTY_STATE, type AdaptiveState } from './adaptive';
+import { effectiveWeights, TRAINED } from './training';
 import { LiveProvider, PaperProvider } from './providers';
 import { generateSignal } from './signalEngine';
 import type { SymbolMarketData, TradingProvider } from './types';
@@ -48,6 +50,8 @@ class AppRuntime {
   private klineCache = new Map<string, { at: number; candles: Candle[] }>();
   private prices: Record<string, number> = {};
   private paperLedgerKey = '@aitb/paper.ledger.v1';
+  private adaptiveKey = '@aitb/adaptive.v1';
+  learner: AdaptiveLearner = new AdaptiveLearner();
   private inited = false;
 
   private storeLogger: BotLogPort = {
@@ -67,6 +71,14 @@ class AppRuntime {
 
     const demo = (await AsyncStorage.getItem(STORAGE_KEYS.demoMode)) === '1';
     useAuthStore.getState().setDemoMode(demo);
+
+    try {
+      const raw = await AsyncStorage.getItem(this.adaptiveKey);
+      const saved = raw ? (JSON.parse(raw) as AdaptiveState) : null;
+      this.learner = new AdaptiveLearner(saved ?? EMPTY_STATE);
+    } catch {
+      this.learner = new AdaptiveLearner();
+    }
 
     const creds = await loadCredentials();
     useAuthStore.getState().setCredentials(creds);
@@ -104,6 +116,7 @@ class AppRuntime {
       },
       logger: this.storeLogger,
       providerFor: () => this.paper ?? this.live!,
+      weightsProvider: () => effectiveWeights(this.learner.state.scales),
     });
     await this.restoreBotState();
 
@@ -178,6 +191,7 @@ class AppRuntime {
         if (mode === 'live' && this.live) return this.live;
         return this.paper ?? this.live!;
       },
+      weightsProvider: () => effectiveWeights(this.learner.state.scales),
     });
 
     await this.restoreBotState();
@@ -204,7 +218,10 @@ class AppRuntime {
 
   private onTickers(tickers: MiniTicker[]): void {
     useMarketStore.getState().applyTickers(tickers);
-    for (const t of tickers) this.prices[t.symbol] = t.close;
+    for (const t of tickers) {
+      this.prices[t.symbol] = t.close;
+      this.learner.onPrice(t.symbol, t.close);
+    }
   }
 
   private async snapshot(symbol: string): Promise<SymbolMarketData> {
@@ -334,9 +351,21 @@ class AppRuntime {
     if (!this.bot || !this.rest) return;
     useBotStore.getState().syncEngine({ ticking: true, positions: this.bot.positions, trades: this.bot.trades });
     try {
-      await this.bot.tick();
+      const result = await this.bot.tick();
+      // continual learning: record fresh signals, resolve matured ones
+      for (const sig of result.signals) {
+        this.learner.record({
+          symbol: sig.symbol,
+          action: sig.action,
+          score: sig.score,
+          price: sig.price,
+          computedAt: sig.computedAt,
+          factors: sig.factors.map((f) => ({ name: f.name, score: f.score })),
+        });
+      }
       this.syncBotStore();
       await this.persistPaperLedger();
+      await this.persistAdaptive();
     } catch (e) {
       this.storeLogger.log('error', `tick failed: ${String(e)}`);
       useBotStore.getState().syncEngine({ ticking: false });
@@ -376,6 +405,37 @@ class AppRuntime {
   }
 
   /* ------------------------------- security ------------------------------- */
+
+  private async persistAdaptive(): Promise<void> {
+    await AsyncStorage.setItem(this.adaptiveKey, JSON.stringify(this.learner.state)).catch(() => undefined);
+  }
+
+  async resetAdaptive(): Promise<void> {
+    this.learner = new AdaptiveLearner();
+    await this.persistAdaptive();
+    this.storeLogger.log('info', 'adaptive learning reset');
+  }
+
+  learningSummary(): {
+    trained: { at: string; source: string; classAcc: number; adopted: boolean; buyAcc: number | null; sellAcc: number | null; holdAcc: number | null };
+    adaptive: ReturnType<AdaptiveLearner['stats']>;
+    scales: Record<string, number>;
+  } {
+    const st = this.learner.stats();
+    return {
+      trained: {
+        at: TRAINED.trainedAt,
+        source: TRAINED.dataSource,
+        classAcc: TRAINED.performance.classAcc,
+        adopted: TRAINED.performance.adopted !== false,
+        buyAcc: TRAINED.performance.decisions.buy.accuracy,
+        sellAcc: TRAINED.performance.decisions.sell.accuracy,
+        holdAcc: TRAINED.performance.decisions.hold.accuracy,
+      },
+      adaptive: st,
+      scales: { ...this.learner.state.scales },
+    };
+  }
 
   async setBiometricEnabled(enabled: boolean): Promise<void> {
     useAuthStore.getState().setBiometricEnabled(enabled);

@@ -68,10 +68,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Train the AI on real Binance history before every build (walk-forward
+      # optimization, out-of-sample guard). Falls back to synthetic data — and
+      # the run stays green — if Binance is unreachable from the runner.
+      - name: Train AI on live Binance history
+        run: npx tsx training/train.ts --evals=300
+        continue-on-error: false
+
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit tests (indicators · signal engine · risk · crypto · Binance client)
+      - name: Unit tests (engine · risk · crypto · Binance client · training)
         run: npm test
 
       - name: Generate native Android project (expo prebuild)
@@ -137,6 +144,14 @@ jobs:
           path: ${{ steps.info.outputs.path }}
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attach AI training report to the summary
+        if: always()
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if [ -f trading-bot/training/REPORT.md ]; then
+            cat trading-bot/training/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Publish on: pushes to main, commit subjects containing [publish-apk],
       # or a manual run with the checkbox ticked.
@@ -281,6 +296,14 @@ jobs:
           path: trading-bot/AI-Trading-Bot-web.zip
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attach AI training report to the summary
+        if: always()
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if [ -f trading-bot/training/REPORT.md ]; then
+            cat trading-bot/training/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Decide whether to publish
         id: mode

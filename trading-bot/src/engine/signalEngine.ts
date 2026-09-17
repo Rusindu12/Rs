@@ -25,8 +25,9 @@ import type {
   SymbolMarketData,
 } from './types';
 import type { Timeframe } from '../config';
+import { effectiveWeights, type EffectiveWeights } from './training';
 
-/** Higher timeframes carry more weight in the confluence mean. */
+/** Higher timeframes carry more weight in the confluence mean (spec base). */
 const TF_WEIGHTS: Partial<Record<Timeframe, number>> = {
   '1m': 0.5,
   '5m': 1,
@@ -106,7 +107,10 @@ export function computeIndicators(c: Candle[]): IndicatorSnapshot {
 }
 
 /** Multi-timeframe confluence: higher-TF-weighted mean of core scores, capped at ±15. */
-export function multiTimeframeConfluence(data: SymbolMarketData): { score: number; perTf: { tf: Timeframe; score: number }[] } {
+export function multiTimeframeConfluence(
+  data: SymbolMarketData,
+  weightOverrides?: Partial<Record<Timeframe, number>>
+): { score: number; perTf: { tf: Timeframe; score: number }[] } {
   const perTf: { tf: Timeframe; score: number }[] = [];
   const tfs = Object.keys(data.candles) as Timeframe[];
   let wSum = 0;
@@ -116,7 +120,7 @@ export function multiTimeframeConfluence(data: SymbolMarketData): { score: numbe
     if (!candles || candles.length < 60) continue;
     const sc = coreScore(candles);
     perTf.push({ tf, score: sc });
-    const w = TF_WEIGHTS[tf] ?? 1;
+    const w = (TF_WEIGHTS[tf] ?? 1) * (weightOverrides?.[tf] ?? 1);
     wSum += w;
     wScore += sc * w;
   }
@@ -182,21 +186,28 @@ function coreScore(c: Candle[]): number {
  *   score <= -30 -> SELL
  *   otherwise    -> HOLD
  */
-export function generateSignal(data: SymbolMarketData): Signal {
+export function generateSignal(
+  data: SymbolMarketData,
+  weights: EffectiveWeights = effectiveWeights()
+): Signal {
   const factors: SignalFactor[] = [];
   const primary = pickPrimary(data);
   const ind = computeIndicators(primary);
   const price = data.lastPrice ?? ind.price;
   let score = 0;
+  const scale = (name: string, raw: number) =>
+    raw === 0 ? 0 : Math.round(raw * (weights.factorScale[name] ?? 1) * 10) / 10;
 
-  // 1) RSI Analysis (±20)
+  // 1) RSI Analysis (trained thresholds, spec: 30/70)
   if (isFinite(ind.rsi)) {
-    if (ind.rsi < 30) {
-      score += 20;
-      factors.push({ name: 'RSI', detail: `RSI ${ind.rsi.toFixed(1)} — oversold`, score: 20 });
-    } else if (ind.rsi > 70) {
-      score -= 20;
-      factors.push({ name: 'RSI', detail: `RSI ${ind.rsi.toFixed(1)} — overbought`, score: -20 });
+    if (ind.rsi < weights.thresholds.rsiOversold) {
+      const s = scale('RSI', 20);
+      score += s;
+      factors.push({ name: 'RSI', detail: `RSI ${ind.rsi.toFixed(1)} — oversold`, score: s });
+    } else if (ind.rsi > weights.thresholds.rsiOverbought) {
+      const s = scale('RSI', -20);
+      score += s;
+      factors.push({ name: 'RSI', detail: `RSI ${ind.rsi.toFixed(1)} — overbought`, score: s });
     } else {
       factors.push({ name: 'RSI', detail: `RSI ${ind.rsi.toFixed(1)} — neutral`, score: 0 });
     }
@@ -205,11 +216,13 @@ export function generateSignal(data: SymbolMarketData): Signal {
   // 2) MACD Analysis (±15)
   if (isFinite(ind.macdHistogram)) {
     if (ind.macdLine > ind.macdSignal && ind.macdHistogram > 0) {
-      score += 15;
-      factors.push({ name: 'MACD', detail: 'bullish crossover', score: 15 });
+      const s = scale('MACD', 15);
+      score += s;
+      factors.push({ name: 'MACD', detail: 'bullish crossover', score: s });
     } else if (ind.macdLine < ind.macdSignal && ind.macdHistogram < 0) {
-      score -= 15;
-      factors.push({ name: 'MACD', detail: 'bearish crossover', score: -15 });
+      const s = scale('MACD', -15);
+      score += s;
+      factors.push({ name: 'MACD', detail: 'bearish crossover', score: s });
     } else {
       factors.push({
         name: 'MACD',
@@ -223,11 +236,13 @@ export function generateSignal(data: SymbolMarketData): Signal {
   if (isFinite(ind.bbLower)) {
     const bbPos = (price - ind.bbLower) / Math.max(1e-12, ind.bbUpper - ind.bbLower); // 0..1
     if (price <= ind.bbLower) {
-      score += 15;
-      factors.push({ name: 'BBands', detail: 'at/below lower band — support', score: 15 });
+      const s = scale('BBands', 15);
+      score += s;
+      factors.push({ name: 'BBands', detail: 'at/below lower band — support', score: s });
     } else if (price >= ind.bbUpper) {
-      score -= 15;
-      factors.push({ name: 'BBands', detail: 'at/above upper band — resistance', score: -15 });
+      const s = scale('BBands', -15);
+      score += s;
+      factors.push({ name: 'BBands', detail: 'at/above upper band — resistance', score: s });
     } else {
       factors.push({
         name: 'BBands',
@@ -240,25 +255,27 @@ export function generateSignal(data: SymbolMarketData): Signal {
   // 4) EMA Trend (±20)
   if (isFinite(ind.ema50)) {
     if (ind.ema9 > ind.ema21 && ind.ema21 > ind.ema50) {
-      score += 20;
-      factors.push({ name: 'EMA', detail: '9 > 21 > 50 — strong uptrend', score: 20 });
+      const s = scale('EMA', 20);
+      score += s;
+      factors.push({ name: 'EMA', detail: '9 > 21 > 50 — strong uptrend', score: s });
     } else if (ind.ema9 < ind.ema21 && ind.ema21 < ind.ema50) {
-      score -= 20;
-      factors.push({ name: 'EMA', detail: '9 < 21 < 50 — strong downtrend', score: -20 });
+      const s = scale('EMA', -20);
+      score += s;
+      factors.push({ name: 'EMA', detail: '9 < 21 < 50 — strong downtrend', score: s });
     } else {
       factors.push({ name: 'EMA', detail: 'no clean 9/21/50 stack', score: 0 });
     }
   }
 
-  // 5) Volume Confirmation (+10 in the direction of the current leaning)
+  // 5) Volume Confirmation (trained spike threshold, spec: 1.5×)
   if (isFinite(ind.avgVolume) && ind.avgVolume > 0) {
     const ratio = ind.volume / ind.avgVolume;
-    if (ratio > 1.5 && score !== 0) {
-      const volScore = score > 0 ? 10 : -10;
+    if (ratio > weights.thresholds.volumeSpike && score !== 0) {
+      const volScore = scale('Volume', score > 0 ? 10 : -10);
       score += volScore;
       factors.push({
         name: 'Volume',
-        detail: `${ratio.toFixed(1)}× average — confirms ${score > 0 ? 'buy' : 'sell'} pressure`,
+        detail: `${ratio.toFixed(1)}× average — confirms ${volScore > 0 ? 'buy' : 'sell'} pressure`,
         score: volScore,
       });
     } else {
@@ -273,42 +290,44 @@ export function generateSignal(data: SymbolMarketData): Signal {
   // 6) Stochastic (±10)
   if (isFinite(ind.stochK) && isFinite(ind.stochD)) {
     if (ind.stochK < 20 && ind.stochK > ind.stochD) {
-      score += 10;
-      factors.push({ name: 'Stoch', detail: `%K ${ind.stochK.toFixed(1)} oversold, crossing up`, score: 10 });
+      const s = scale('Stoch', 10);
+      score += s;
+      factors.push({ name: 'Stoch', detail: `%K ${ind.stochK.toFixed(1)} oversold, crossing up`, score: s });
     } else if (ind.stochK > 80 && ind.stochK < ind.stochD) {
-      score -= 10;
-      factors.push({ name: 'Stoch', detail: `%K ${ind.stochK.toFixed(1)} overbought, crossing down`, score: -10 });
+      const s = scale('Stoch', -10);
+      score += s;
+      factors.push({ name: 'Stoch', detail: `%K ${ind.stochK.toFixed(1)} overbought, crossing down`, score: s });
     } else {
       factors.push({ name: 'Stoch', detail: `%K ${ind.stochK.toFixed(1)} / %D ${ind.stochD.toFixed(1)}`, score: 0 });
     }
   }
 
-  // 7) Multi-timeframe confluence (±15)
-  const mtf = multiTimeframeConfluence(data);
-  score += Math.round(mtf.score * 10) / 10;
-  factors.push({
-    name: 'Multi-TF',
-    detail: mtf.perTf.map((x) => `${x.tf}:${x.score > 0 ? '+' : ''}${x.score.toFixed(0)}`).join('  '),
-    score: Math.round(mtf.score * 10) / 10,
-  });
+  // 7) Multi-timeframe confluence (±15, trained TF weights)
+  const mtf = multiTimeframeConfluence(data, weights.mtfWeights);
+  {
+    const s = scale('Multi-TF', mtf.score);
+    score += s;
+    factors.push({
+      name: 'Multi-TF',
+      detail: mtf.perTf.map((x) => `${x.tf}:${x.score > 0 ? '+' : ''}${x.score.toFixed(0)}`).join('  '),
+      score: s,
+    });
+  }
 
   /* ---------------- AI v2: pattern / divergence / S-R / regime ------------ */
 
   // 8) Candlestick pattern (up to ±12)
   const pattern = detectCandlePattern(primary);
   if (pattern) {
-    score += pattern.score;
-    factors.push({
-      name: 'Pattern',
-      detail: pattern.name,
-      score: pattern.score,
-    });
+    const s = scale('Pattern', pattern.score);
+    score += s;
+    factors.push({ name: 'Pattern', detail: pattern.name, score: s });
   }
 
   // 9) RSI divergence (±10)
   const divergence = detectRsiDivergence(primary);
   if (divergence) {
-    const dv = divergence === 'bullish' ? 10 : -10;
+    const dv = scale('Divergence', divergence === 'bullish' ? 10 : -10);
     score += dv;
     factors.push({
       name: 'Divergence',
@@ -352,18 +371,20 @@ export function generateSignal(data: SymbolMarketData): Signal {
   }
   srScore = Math.max(-10, Math.min(10, srScore));
   if (srScore !== 0) {
-    score += srScore;
-    factors.push({ name: 'S/R Zones', detail: srBias, score: srScore });
+    const s = scale('S/R Zones', srScore);
+    score += s;
+    factors.push({ name: 'S/R Zones', detail: srBias, score: s });
   }
 
-  // 11) ADX trend regime (±5) — trend-following gate
+  // 11) ADX trend regime (±5) — trained gate
   const adxRes = adx(primary, 14);
   const adxVal = last(adxRes.adx);
   const emaFactor = factors.find((f) => f.name === 'EMA');
   let regime: 'trending' | 'ranging' = 'ranging';
   if (isFinite(adxVal) && adxVal >= 25) {
     regime = 'trending';
-    const gate = emaFactor && emaFactor.score !== 0 ? (emaFactor.score > 0 ? 5 : -5) : 0;
+    const gateRaw = weights.regimeGate && emaFactor && emaFactor.score !== 0 ? (emaFactor.score > 0 ? 5 : -5) : 0;
+    const gate = scale('Regime', gateRaw);
     if (gate !== 0) {
       score += gate;
       factors.push({

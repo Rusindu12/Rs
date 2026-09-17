@@ -1,4 +1,5 @@
 import { generateSignal, scoreToAction, multiTimeframeConfluence } from '../src/engine/signalEngine';
+import { SPEC_WEIGHTS } from '../src/engine/training';
 import type { Candle } from '../src/indicators/indicators';
 import type { SymbolMarketData } from '../src/engine/types';
 
@@ -72,7 +73,7 @@ describe('generateSignal', () => {
   it('fires BUY on a clean steady uptrend with a volume spike', () => {
     // Trend up, RSI in neutral territory, bullish MACD, stacked EMAs, volume confirm.
     const c = makeCandles({ driftPctPerCandle: 0.15, count: 250, seed: 8, noisePct: 0.7, finalVolumeSpike: true });
-    const sig = generateSignal(data('TESTUSDT', { '15m': c, '5m': c.slice(0, 230), '1h': c.slice(0, 210) }));
+    const sig = generateSignal(data('TESTUSDT', { '15m': c, '5m': c.slice(0, 230), '1h': c.slice(0, 210) }), SPEC_WEIGHTS);
     expect(sig.score).toBeGreaterThanOrEqual(30);
     expect(sig.action === 'BUY' || sig.action === 'STRONG_BUY').toBe(true);
     const ema = sig.factors.find((f) => f.name === 'EMA');
@@ -85,7 +86,7 @@ describe('generateSignal', () => {
 
   it('fires SELL on a clean steady downtrend', () => {
     const c = makeCandles({ driftPctPerCandle: -0.15, count: 250, seed: 2, noisePct: 0.7, finalVolumeSpike: true });
-    const sig = generateSignal(data('TESTUSDT', { '15m': c, '5m': c.slice(0, 230), '1h': c.slice(0, 210) }));
+    const sig = generateSignal(data('TESTUSDT', { '15m': c, '5m': c.slice(0, 230), '1h': c.slice(0, 210) }), SPEC_WEIGHTS);
     expect(sig.score).toBeLessThanOrEqual(-30);
     expect(sig.action === 'SELL' || sig.action === 'STRONG_SELL').toBe(true);
     const ema = sig.factors.find((f) => f.name === 'EMA');
@@ -96,14 +97,14 @@ describe('generateSignal', () => {
 
   it('holds on flat noise', () => {
     const c = makeCandles({ driftPctPerCandle: 0, count: 250, seed: 5, noisePct: 0.5 });
-    const sig = generateSignal(data('TESTUSDT', { '15m': c }));
+    const sig = generateSignal(data('TESTUSDT', { '15m': c }), SPEC_WEIGHTS);
     expect(Math.abs(sig.score)).toBeLessThan(30);
     expect(sig.action).toBe('HOLD');
   });
 
   it('includes the seven scored factors plus informational context', () => {
     const c = makeCandles({ driftPctPerCandle: 0.15, count: 250, seed: 8, noisePct: 0.7 });
-    const sig = generateSignal(data('TESTUSDT', { '15m': c }));
+    const sig = generateSignal(data('TESTUSDT', { '15m': c }), SPEC_WEIGHTS);
     const names = sig.factors.map((f) => f.name);
     for (const n of ['RSI', 'MACD', 'BBands', 'EMA', 'Volume', 'Stoch', 'Multi-TF']) {
       expect(names).toContain(n);

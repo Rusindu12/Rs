@@ -1,6 +1,7 @@
 import { BotEngine, memoryStorage } from '../src/engine/tradingBot';
 import { PaperProvider } from '../src/engine/providers';
 import { checkEntryRisk, checkExit, unrealizedPnl } from '../src/engine/riskManager';
+import { SPEC_WEIGHTS } from '../src/engine/training';
 import type { BotConfig, Position, SymbolMarketData, TradingProvider } from '../src/engine/types';
 import { makeCandles } from './signalEngine.test';
 
@@ -73,6 +74,7 @@ function makeBot(market: ReturnType<typeof fakeMarket>, provider: TradingProvide
     market,
     storage: memoryStorage(),
     clock: { now: () => 1_700_000_000_000 },
+    weightsProvider: () => SPEC_WEIGHTS,
   });
   bot.config = config;
   return bot;

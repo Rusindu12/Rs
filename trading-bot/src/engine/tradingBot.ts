@@ -10,6 +10,7 @@ import type {
 import { atLeastBuy } from './types';
 import { checkEntryRisk, checkExit, unrealizedPnl } from './riskManager';
 import { generateSignal } from './signalEngine';
+import type { EffectiveWeights } from './training';
 
 /* ------------------------------------------------------------------ */
 /* Injectable ports (make the engine fully unit-testable)              */
@@ -107,6 +108,8 @@ export class BotEngine {
     logger?: BotLogPort;
     /** Resolve a provider by mode so paper positions are always paper-closed. */
     providerFor?: (mode: 'paper' | 'live') => TradingProvider;
+    /** Live weights (trained × adaptive) resolved fresh on every signal. */
+    weightsProvider?: () => EffectiveWeights;
   }) {
     this.provider = deps.provider;
     this.market = deps.market;
@@ -115,7 +118,10 @@ export class BotEngine {
     this.logger = deps.logger ?? new ConsoleLog();
     this.providerFor =
       deps.providerFor ?? ((mode) => (mode === this.provider.mode ? this.provider : this.provider));
+    this.weightsProvider = deps.weightsProvider;
   }
+
+  private weightsProvider?: () => EffectiveWeights;
 
   /* ----------------------------- persistence ----------------------------- */
 
@@ -211,7 +217,7 @@ export class BotEngine {
           this.logger.log('warn', `market data unavailable for ${symbol}: ${String(e)}`);
           continue;
         }
-        const signal = generateSignal(data);
+        const signal = generateSignal(data, this.weightsProvider?.() ?? undefined);
         signals.push(signal);
 
         const position = this.positions.find((p) => p.symbol === symbol);
