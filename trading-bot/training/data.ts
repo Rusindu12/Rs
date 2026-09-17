@@ -4,6 +4,7 @@
  */
 import type { Candle } from '../src/indicators/indicators';
 import { ENGINE_TIMEFRAMES, DEFAULT_SYMBOLS, type Timeframe } from '../src/config';
+import { unzipSync } from 'fflate';
 
 const REST = 'https://api.binance.com';
 
@@ -40,6 +41,80 @@ export async function fetchKlines(symbol: string, interval: Timeframe, limit = 1
     quoteVolume: Number(r[7]),
     trades: Number(r[8]),
   }));
+}
+
+/* ----------------- data.binance.vision monthly-zip fallback --------------- */
+/* GitHub Actions runners (Azure IPs) get blocked by api.binance.com, but the
+ * official public history mirror data.binance.vision (CloudFront) is reachable. */
+
+const VISION = 'https://data.binance.vision/data/spot/monthly/klines';
+
+function lastMonths(n: number): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  d.setDate(1); // first of current month
+  for (let i = 1; i <= n; i++) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    out.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return out.reverse(); // oldest first
+}
+
+async function fetchVisionMonth(symbol: string, interval: Timeframe, ym: string): Promise<Candle[]> {
+  const url = `${VISION}/${symbol}/${interval}/${symbol}-${interval}-${ym}.zip`;
+  let lastErr: unknown;
+  for (let i = 0; i < 2; i++) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 30_000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+      const name = Object.keys(files)[0];
+      const text = new TextDecoder().decode(files[name]);
+      const rows: Candle[] = [];
+      for (const line of text.split('\n')) {
+        const c = line.split(',');
+        if (c.length < 7 || !Number.isFinite(Number(c[0]))) continue; // skip header/empty
+        rows.push({
+          openTime: Number(c[0]),
+          open: Number(c[1]),
+          high: Number(c[2]),
+          low: Number(c[3]),
+          close: Number(c[4]),
+          volume: Number(c[5]),
+          closeTime: Number(c[6]),
+          quoteVolume: Number(c[7]) || 0,
+          trades: Number(c[8]) || 0,
+        });
+      }
+      if (!rows.length) throw new Error(`empty kline csv for ${url}`);
+      return rows;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+/** Real market history via monthly zips (last `months` full months, all TFs). */
+export async function fetchKlinesVision(symbol: string, interval: Timeframe, months = 3): Promise<Candle[]> {
+  const parts: Candle[][] = [];
+  for (const ym of lastMonths(months)) {
+    parts.push(await fetchVisionMonth(symbol, interval, ym));
+  }
+  const seen = new Set<number>();
+  const out: Candle[] = [];
+  for (const p of parts) {
+    for (const c of p) {
+      if (seen.has(c.openTime)) continue;
+      seen.add(c.openTime);
+      out.push(c);
+    }
+  }
+  out.sort((a, b) => a.openTime - b.openTime);
+  return out;
 }
 
 /* ------------------------- synthetic fallback ---------------------------- */
@@ -115,9 +190,24 @@ export async function loadTrainingSet(
         console.log(`  fetched ${symbol}: ${primary.length} × 15m bars + ${ENGINE_TIMEFRAMES.length - 1} timeframes`);
       }
     } catch (e) {
-      console.warn(`live fetch failed (${String(e)}) — falling back to synthetic data`);
-      live = false;
-      sets.length = 0;
+      console.warn(`live REST fetch failed (${String(e)}) — trying data.binance.vision history`);
+      try {
+        for (const symbol of symbols) {
+          const primary = await fetchKlinesVision(symbol, '15m');
+          const candles: Partial<Record<Timeframe, Candle[]>> = { '15m': primary };
+          for (const tf of ENGINE_TIMEFRAMES) {
+            if (tf === '15m') continue;
+            candles[tf] = await fetchKlinesVision(symbol, tf);
+          }
+          sets.push({ symbol, primary, candles, live: true });
+          console.log(`  vision ${symbol}: ${primary.length} × 15m bars + ${ENGINE_TIMEFRAMES.length - 1} timeframes`);
+        }
+        live = true;
+      } catch (e2) {
+        console.warn(`vision fetch failed too (${String(e2)}) — falling back to synthetic data`);
+        live = false;
+        sets.length = 0;
+      }
     }
   }
   if (!sets.length) {

@@ -109,7 +109,8 @@ export function computeIndicators(c: Candle[]): IndicatorSnapshot {
 /** Multi-timeframe confluence: higher-TF-weighted mean of core scores, capped at ±15. */
 export function multiTimeframeConfluence(
   data: SymbolMarketData,
-  weightOverrides?: Partial<Record<Timeframe, number>>
+  weightOverrides?: Partial<Record<Timeframe, number>>,
+  th?: { rsiOversold: number; rsiOverbought: number }
 ): { score: number; perTf: { tf: Timeframe; score: number }[] } {
   const perTf: { tf: Timeframe; score: number }[] = [];
   const tfs = Object.keys(data.candles) as Timeframe[];
@@ -118,7 +119,7 @@ export function multiTimeframeConfluence(
   for (const tf of tfs) {
     const candles = data.candles[tf];
     if (!candles || candles.length < 60) continue;
-    const sc = coreScore(candles);
+    const sc = coreScore(candles, th);
     perTf.push({ tf, score: sc });
     const w = (TF_WEIGHTS[tf] ?? 1) * (weightOverrides?.[tf] ?? 1);
     wSum += w;
@@ -134,7 +135,9 @@ export function multiTimeframeConfluence(
  * candle series. Used both for the primary timeframe factors (full weights)
  * and for each timeframe in the multi-timeframe confluence.
  */
-function coreScore(c: Candle[]): number {
+function coreScore(c: Candle[], th?: { rsiOversold: number; rsiOverbought: number }): number {
+  const os = th?.rsiOversold ?? 30;
+  const ob = th?.rsiOverbought ?? 70;
   const cl = closes(c);
   const price = last(cl);
   let score = 0;
@@ -142,8 +145,8 @@ function coreScore(c: Candle[]): number {
   // RSI Analysis (14)
   const r = last(rsi(cl, 14));
   if (isFinite(r)) {
-    if (r < 30) score += 20;
-    else if (r > 70) score -= 20;
+    if (r < os) score += 20;
+    else if (r > ob) score -= 20;
   }
 
   // MACD Analysis (12, 26, 9)
@@ -303,7 +306,7 @@ export function generateSignal(
   }
 
   // 7) Multi-timeframe confluence (±15, trained TF weights)
-  const mtf = multiTimeframeConfluence(data, weights.mtfWeights);
+  const mtf = multiTimeframeConfluence(data, weights.mtfWeights, weights.thresholds);
   {
     const s = scale('Multi-TF', mtf.score);
     score += s;

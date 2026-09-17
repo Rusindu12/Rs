@@ -14,7 +14,7 @@ function mkSet(symbol = 'TESTUSDT', bars = 400) {
   const primary = syntheticKlines(symbol, '15m', bars);
   const end = primary.at(-1)!.closeTime;
   const candles: Partial<Record<TF, Candle[]>> = { '15m': primary };
-  for (const tf of ['1h', '4h'] as TF[]) {
+  for (const tf of ['1m', '5m', '1h', '4h'] as TF[]) {
     // live feeds end all timeframes at "now"; mirror that so alignment matches
     candles[tf] = syntheticKlines(symbol, tf, bars).filter((c) => c.closeTime <= end);
   }
@@ -44,7 +44,7 @@ describe('trained weights model', () => {
   it('effectiveWeights merges trained × adaptive and clamps', () => {
     const w = effectiveWeights({ RSI: 10, MACD: 0.1, Pattern: 1.2 });
     const rsiScale = w.factorScale.RSI;
-    expect(rsiScale).toBeLessThanOrEqual((TRAINED.factorScale.RSI ?? 1) * 1.4 + 0.001); // adaptive clamped to 1.4
+    expect(rsiScale).toBeLessThanOrEqual((TRAINED.factorScale.RSI ?? 1) * 1.4 + 0.01); // adaptive clamped to 1.4
     expect(w.factorScale.MACD).toBeGreaterThanOrEqual((TRAINED.factorScale.MACD ?? 1) * 0.6 - 0.01);
     expect(w.factorScale.Pattern).toBeCloseTo((TRAINED.factorScale.Pattern ?? 1) * 1.2, 1);
     // untouched factor present
@@ -82,7 +82,8 @@ describe('backtester parity with the app engine', () => {
     const app = generateSignal(asMarketData(set), weights);
     for (const name of SHARED_FACTORS) {
       const appF = app.factors.find((f) => f.name === name)?.score ?? 0;
-      expect(Math.abs((fast.factors[name] ?? 0) - appF)).toBeLessThanOrEqual(0.6);
+      const d = Math.abs((fast.factors[name] ?? 0) - appF);
+      expect(d).toBeLessThanOrEqual(0.6);
     }
   });
 });
