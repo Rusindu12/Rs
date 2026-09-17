@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "trainedAt": "2026-09-17T15:38:22.536Z",
+  "dataSource": "synthetic",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT"
+  ],
+  "barsTested": 1000,
+  "evals": 300,
+  "walkForward": {
+    "trainBars": 700,
+    "testBars": 300
+  },
+  "factorScale": {
+    "RSI": 0.5906412601470947,
+    "MACD": 0.91456598374034,
+    "BBands": 0.7418266534805298,
+    "EMA": 1.2290475923186914,
+    "Volume": 0.8711147308349609,
+    "Stoch": 0.6204566955566406,
+    "Multi-TF": 1.4211261303424836,
+    "Pattern": 0.7849229574203491,
+    "Regime": 0.7150017766729075,
+    "Divergence": 1,
+    "S/R Zones": 1
+  },
+  "thresholds": {
+    "rsiOversold": 25.1,
+    "rsiOverbought": 59.5,
+    "volumeSpike": 1.7
+  },
+  "regimeGate": true,
+  "mtfWeights": {
+    "1m": 0.9920018911361694,
+    "5m": 0.9375996351242066,
+    "15m": 0.8660056829452515,
+    "1h": 1.586727786064148,
+    "4h": 0.8868921041488648
+  },
+  "performance": {
+    "trainFit": 0.62,
+    "testFit": 0.51,
+    "defaultTestFit": 0.49,
+    "adopted": true,
+    "winRate": 44.17,
+    "returnPct": 1.3,
+    "profitFactor": 3.2,
+    "maxDrawdownPct": 1.44,
+    "classAcc": 64.16,
+    "decisions": {
+      "buy": {
+        "n": 28,
+        "correct": 19,
+        "accuracy": 67.86
+      },
+      "sell": {
+        "n": 82,
+        "correct": 59,
+        "accuracy": 71.95
+      },
+      "hold": {
+        "n": 183,
+        "correct": 110,
+        "accuracy": 60.11
+      }
+    }
+  }
+}

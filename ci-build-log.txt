@@ -1,0 +1,207 @@
+
+> ai-trading-bot@1.0.0 test
+> jest
+
+PASS __tests__/indicators.test.ts
+PASS __tests__/signalEngine.test.ts
+PASS __tests__/advanced.test.ts
+PASS __tests__/bot.test.ts
+  ● Console
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] CLOSE UPUSDT @ 104.10399999999998 — TAKE_PROFIT — PnL +3.66 USDT
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] CLOSE UPUSDT @ 97.902 — STOP_LOSS — PnL -2.01 USDT
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN SWAP qty 0.9075 @ 100 — STRONG_BUY score 60 conf 63% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] CLOSE SWAP @ 100 — SIGNAL_EXIT — PnL -0.09 USDT
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN A qty 0.9075 @ 100 — STRONG_BUY score 60 conf 63% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN B qty 0.9075 @ 100 — STRONG_BUY score 60 conf 63% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] skip C STRONG_BUY: max open trades reached (2)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+          at _loop.next (<anonymous>)
+
+    console.log
+      [bot][info] skip D STRONG_BUY: max open trades reached (2)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+          at _loop.next (<anonymous>)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 4.575 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] CLOSE UPUSDT @ 1 — STOP_LOSS — PnL -452.93 USDT
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] skip UPUSDT STRONG_BUY: daily loss limit hit (4.7% ≥ 1%)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+          at _loop.next (<anonymous>)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot stopped — open positions remain, monitored manually
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] CLOSE UPUSDT @ 100 — EMERGENCY_STOP — PnL -0.09 USDT
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][warn] EMERGENCY STOP executed — 1 position(s) closed
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][info] bot started (paper mode)
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+    console.log
+      [bot][trade] OPEN UPUSDT qty 0.915 @ 100 — STRONG_BUY score 65 conf 66% · bearish div | SL 2.0% / TP 4.0%
+
+      at ConsoleLog.log (src/engine/tradingBot.ts:39:13)
+
+PASS __tests__/binance.test.ts
+PASS __tests__/crypto.test.ts
+FAIL __tests__/ai-training.test.ts
+  ● trained weights model › effectiveWeights merges trained × adaptive and clamps
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 0.8278977642059325
+    Received:    0.83
+
+    [0m [90m 45 |[39m     [36mconst[39m w [33m=[39m effectiveWeights({ [33mRSI[39m[33m:[39m [35m10[39m[33m,[39m [33mMACD[39m[33m:[39m [35m0.1[39m[33m,[39m [33mPattern[39m[33m:[39m [35m1.2[39m })[33m;[39m
+     [90m 46 |[39m     [36mconst[39m rsiScale [33m=[39m w[33m.[39mfactorScale[33m.[39m[33mRSI[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 47 |[39m     expect(rsiScale)[33m.[39mtoBeLessThanOrEqual(([33mTRAINED[39m[33m.[39mfactorScale[33m.[39m[33mRSI[39m [33m?[39m[33m?[39m [35m1[39m) [33m*[39m [35m1.4[39m [33m+[39m [35m0.001[39m)[33m;[39m [90m// adaptive clamped to 1.4[39m
+     [90m    |[39m                      [31m[1m^[22m[39m
+     [90m 48 |[39m     expect(w[33m.[39mfactorScale[33m.[39m[33mMACD[39m)[33m.[39mtoBeGreaterThanOrEqual(([33mTRAINED[39m[33m.[39mfactorScale[33m.[39m[33mMACD[39m [33m?[39m[33m?[39m [35m1[39m) [33m*[39m [35m0.6[39m [33m-[39m [35m0.01[39m)[33m;[39m
+     [90m 49 |[39m     expect(w[33m.[39mfactorScale[33m.[39m[33mPattern[39m)[33m.[39mtoBeCloseTo(([33mTRAINED[39m[33m.[39mfactorScale[33m.[39m[33mPattern[39m [33m?[39m[33m?[39m [35m1[39m) [33m*[39m [35m1.2[39m[33m,[39m [35m1[39m)[33m;[39m
+     [90m 50 |[39m     [90m// untouched factor present[39m[0m
+
+      at Object.toBeLessThanOrEqual (__tests__/ai-training.test.ts:47:22)
+
+  ● backtester parity with the app engine › fast scorer matches generateSignal factor-by-factor
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 0.6
+    Received:    28.4
+
+    [0m [90m 83 |[39m     [36mfor[39m ([36mconst[39m name [36mof[39m [33mSHARED_FACTORS[39m) {
+     [90m 84 |[39m       [36mconst[39m appF [33m=[39m app[33m.[39mfactors[33m.[39mfind((f) [33m=>[39m f[33m.[39mname [33m===[39m name)[33m?[39m[33m.[39mscore [33m?[39m[33m?[39m [35m0[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 85 |[39m       expect([33mMath[39m[33m.[39mabs((fast[33m.[39mfactors[name] [33m?[39m[33m?[39m [35m0[39m) [33m-[39m appF))[33m.[39mtoBeLessThanOrEqual([35m0.6[39m)[33m;[39m
+     [90m    |[39m                                                          [31m[1m^[22m[39m
+     [90m 86 |[39m     }
+     [90m 87 |[39m   })[33m;[39m
+     [90m 88 |[39m })[33m;[39m[0m
+
+      at toBeLessThanOrEqual (__tests__/ai-training.test.ts:85:58)
+      at Object._loop (__tests__/ai-training.test.ts:83:38)
+
+Test Suites: 1 failed, 6 passed, 7 total
+Tests:       2 failed, 83 passed, 85 total
+Snapshots:   0 total
+Time:        3.232 s
+Ran all test suites.
+
