@@ -79,7 +79,9 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests (engine · risk · crypto · Binance client · training)
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log
 
       - name: Generate native Android project (expo prebuild)
         run: npx expo prebuild -p android --no-install
@@ -111,12 +113,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           cd "$GITHUB_WORKSPACE"
-          if [ -f trading-bot/android/build.log ]; then
+          L=""
+          [ -f trading-bot/android/build.log ] && L="trading-bot/android/build.log"
+          [ -f trading-bot/test.log ] && L="$L trading-bot/test.log"
+          [ -f trading-bot/src/engine/trainedWeights.json ] && cp trading-bot/src/engine/trainedWeights.json ci-trained-weights.json 2>/dev/null || true
+          if [ -n "$L" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git checkout --detach -q
-            tail -c 300000 trading-bot/android/build.log > ci-build-log.txt
-            git add -f ci-build-log.txt
+            for f in $L; do tail -c 300000 "$f" >> ci-build-log.txt; echo >> ci-build-log.txt; done
+            git add -f ci-build-log.txt ci-trained-weights.json 2>/dev/null || git add -f ci-build-log.txt
             git commit -qm "ci build log: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
             git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/ci-debug
             echo "log pushed to refs/heads/ci-debug"
