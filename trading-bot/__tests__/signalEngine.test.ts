@@ -108,10 +108,20 @@ describe('generateSignal', () => {
     for (const n of ['RSI', 'MACD', 'BBands', 'EMA', 'Volume', 'Stoch', 'Multi-TF']) {
       expect(names).toContain(n);
     }
+    // AI v2 factors are always present (Regime), others when they fire.
+    expect(names).toContain('Regime');
     for (const n of ['VWAP', 'Ichimoku', 'ATR', 'Fibonacci', 'Vol Profile']) {
       expect(names).toContain(n);
     }
-    expect(sig.confidence).toBe(Math.min(100, Math.abs(sig.score)));
+    // AI v2 confidence: 0.8×|score| + 20×factor-agreement, clamped to 100.
+    const scored = sig.factors.filter((f) => !f.informational && f.score !== 0);
+    const totalMag = scored.reduce((s2, f) => s2 + Math.abs(f.score), 0);
+    const agreement = totalMag > 0 ? Math.abs(scored.reduce((s2, f) => s2 + f.score, 0)) / totalMag : 0;
+    expect(sig.confidence).toBe(
+      Math.max(0, Math.min(100, Math.round(0.8 * Math.abs(sig.score) + 20 * agreement)))
+    );
+    expect(['trending', 'ranging']).toContain(sig.extras.regime);
+    expect(sig.extras.expectedMovePct).toBeGreaterThanOrEqual(0);
   });
 
   it('multi-timeframe confluence is the capped mean of per-TF scores', () => {

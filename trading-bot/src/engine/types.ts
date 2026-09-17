@@ -64,6 +64,21 @@ export interface Signal {
   timeframes: { tf: Timeframe; score: number }[];
   price: number;
   computedAt: number;
+  /** AI v2 structured context (patterns, regime, divergences, targets). */
+  extras: {
+    /** Detected candlestick pattern name, if any. */
+    pattern?: string;
+    /** RSI divergence direction on the primary timeframe. */
+    divergence?: 'bullish' | 'bearish' | null;
+    /** ADX-based market regime. */
+    regime: 'trending' | 'ranging';
+    adx: number;
+    /** ATR-derived expected move (±%) over the next few candles. */
+    expectedMovePct: number;
+    atrPct: number;
+    /** Short S/R position summary, e.g. "at value-area support". */
+    srBias: string;
+  };
 }
 
 export type TradeSide = 'BUY' | 'SELL';
@@ -111,6 +126,10 @@ export interface BotConfig {
   /** Minimum signal strength required to open a new position. */
   minSignal: SignalStrength;
   pollIntervalMs: number;
+  /** Widen SL/TP with ATR volatility so volatile coins aren't clipped. */
+  useAtrStops: boolean;
+  /** Scale position size between 0.75×–1× by signal confidence. */
+  confidenceSizing: boolean;
 }
 
 export interface Balances {

@@ -38,11 +38,12 @@ export function TabNavigator() {
               <Pressable
                 key={t.key}
                 onPress={() => setActive(t.key)}
-                style={styles.tab}
+                style={[styles.tab, isActive && styles.tabActive]}
                 android_ripple={{ color: colors.border }}
               >
                 <Text style={[styles.tabIcon, isActive && styles.tabIconActive]}>{t.icon}</Text>
                 <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{t.label}</Text>
+                <View style={[styles.tabDot, isActive && styles.tabDotActive]} />
               </Pressable>
             );
           })}
@@ -62,9 +63,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     paddingBottom: Platform.OS === 'android' ? 2 : 0,
   },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 7 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 12, marginHorizontal: 4 },
+  tabActive: { backgroundColor: '#F0B90B14' },
   tabIcon: { fontSize: 18, opacity: 0.55 },
   tabIconActive: { opacity: 1 },
   tabLabel: { color: colors.textFaint, fontSize: 10, marginTop: 2, fontWeight: '600' },
   tabLabelActive: { color: colors.gold },
+  tabDot: { width: 4, height: 4, borderRadius: 2, marginTop: 3, backgroundColor: 'transparent' },
+  tabDotActive: { backgroundColor: colors.gold },
 });

@@ -63,6 +63,8 @@ const baseConfig = (): BotConfig => ({
   dailyLossLimitPct: 6,
   minSignal: 'BUY',
   pollIntervalMs: 30_000,
+  useAtrStops: true,
+  confidenceSizing: true,
 });
 
 function makeBot(market: ReturnType<typeof fakeMarket>, provider: TradingProvider, config = baseConfig()) {
@@ -137,10 +139,18 @@ describe('BotEngine', () => {
     const { opened } = await bot.tick();
     expect(opened).toHaveLength(1);
     expect(provider.buys).toHaveLength(1);
-    expect(provider.buys[0].quoteQty).toBe(100);
+    // Confidence sizing: 0.75×–1× of the configured $100.
+    const spent = provider.buys[0].quoteQty;
+    expect(spent).toBeGreaterThanOrEqual(75);
+    expect(spent).toBeLessThanOrEqual(100);
     const pos = bot.positions[0];
-    expect(pos.stopLoss).toBeCloseTo(pos.entryPrice * 0.98, 6);
-    expect(pos.takeProfit).toBeCloseTo(pos.entryPrice * 1.04, 6);
+    // ATR-aware stops: SL within [1×, 2×] of the configured 2 %.
+    const slPct = ((pos.entryPrice - pos.stopLoss) / pos.entryPrice) * 100;
+    expect(slPct).toBeGreaterThanOrEqual(2 - 1e-6);
+    expect(slPct).toBeLessThanOrEqual(4 + 1e-6);
+    const tpPct = ((pos.takeProfit - pos.entryPrice) / pos.entryPrice) * 100;
+    expect(tpPct).toBeGreaterThanOrEqual(4 - 1e-6);
+    expect(tpPct).toBeLessThanOrEqual(8 + 1e-6);
   });
 
   it('does not open twice on the same symbol', async () => {

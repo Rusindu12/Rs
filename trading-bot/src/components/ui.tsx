@@ -1,4 +1,5 @@
 import React from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
   Modal,
@@ -13,6 +14,35 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { colors } from '../theme';
+
+/* -------------------------------- HeroCard ------------------------------- */
+
+/** Gradient hero card for the dashboard's primary metrics. */
+export function HeroCard({ children }: { children: React.ReactNode }) {
+  return (
+    <LinearGradient
+      colors={['#1E2530', '#12161C']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.heroCard}
+    >
+      {children}
+    </LinearGradient>
+  );
+}
+
+/* --------------------------------- Chip ---------------------------------- */
+
+export function Chip({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'buy' | 'sell' | 'neutral' | 'gold' | 'info' }) {
+  const bg = tone === 'buy' ? colors.greenDim : tone === 'sell' ? colors.redDim : tone === 'gold' ? '#F0B90B22' : tone === 'info' ? '#1E80FF22' : colors.bgElevated;
+  const fg = tone === 'buy' ? colors.green : tone === 'sell' ? colors.red : tone === 'gold' ? colors.gold : tone === 'info' ? colors.blue : colors.textDim;
+  return (
+    <View style={[styles.chip, { backgroundColor: bg, borderColor: fg + '44' }]}>
+      <Text style={styles.chipLabel}>{label}</Text>
+      <Text style={[styles.chipValue, { color: fg }]} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
 
 /* --------------------------------- Card --------------------------------- */
 
@@ -301,12 +331,29 @@ export function EmptyState({ icon, title, subtitle }: { icon: string; title: str
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.bgCard,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 12,
   },
+  heroCard: {
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2B3340',
+  },
+  chip: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  chipLabel: { color: colors.textFaint, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.5 },
+  chipValue: { color: colors.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
+
   cardTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

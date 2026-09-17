@@ -1,4 +1,4 @@
-import { BOT_DEFAULTS, STORAGE_KEYS } from '../config';
+import { BOT_DEFAULTS, MIN_NOTIONAL_USDT, STORAGE_KEYS } from '../config';
 import type {
   BotConfig,
   Position,
@@ -61,6 +61,8 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   dailyLossLimitPct: BOT_DEFAULTS.dailyLossLimitPct,
   minSignal: BOT_DEFAULTS.minSignal,
   pollIntervalMs: BOT_DEFAULTS.pollIntervalMs,
+  useAtrStops: true,
+  confidenceSizing: true,
 };
 
 export interface BotTickResult {
@@ -258,7 +260,22 @@ export class BotEngine {
     price: number,
     _assetFree: Record<string, number>
   ): Promise<TradeRecord> {
-    const { qty, price: fillPrice, feeUsdt } = await this.provider.marketBuy(symbol, sizeUsdt);
+    // AI confidence sizing: scale 0.75×–1× of the configured size.
+    let size = sizeUsdt;
+    if (this.config.confidenceSizing) {
+      size = Math.round(sizeUsdt * (0.75 + 0.25 * (signal.confidence / 100)) * 100) / 100;
+      size = Math.max(MIN_NOTIONAL_USDT, size);
+    }
+    // ATR-aware SL/TP: widen the configured distances by volatility, capped 2×.
+    const atrPct = signal.extras && isFinite(signal.extras.atrPct) ? signal.extras.atrPct : 0;
+    let slPct = this.config.stopLossPct;
+    let tpPct = this.config.takeProfitPct;
+    if (this.config.useAtrStops && atrPct > 0) {
+      slPct = Math.min(Math.max(slPct, 1.2 * atrPct), slPct * 2);
+      tpPct = Math.min(Math.max(tpPct, 2 * atrPct), tpPct * 2);
+    }
+
+    const { qty, price: fillPrice, feeUsdt } = await this.provider.marketBuy(symbol, size);
     const entry = fillPrice > 0 ? fillPrice : price;
     const position: Position = {
       id: `${symbol}-${this.clock.now()}`,
@@ -267,11 +284,11 @@ export class BotEngine {
       qty,
       entryPrice: entry,
       openedAt: this.clock.now(),
-      stopLoss: entry * (1 - this.config.stopLossPct / 100),
-      takeProfit: entry * (1 + this.config.takeProfitPct / 100),
-      tradeAmountUsdt: sizeUsdt,
+      stopLoss: entry * (1 - slPct / 100),
+      takeProfit: entry * (1 + tpPct / 100),
+      tradeAmountUsdt: size,
       mode: this.provider.mode,
-      signalAtEntry: `${signal.action} (${signal.score})`,
+      signalAtEntry: `${signal.action} (${signal.score}, conf ${signal.confidence}%)`,
     };
     this.positions.push(position);
     const record: TradeRecord = {
@@ -283,7 +300,7 @@ export class BotEngine {
       openedAt: position.openedAt,
       mode: this.provider.mode,
       status: 'OPEN',
-      reason: `${signal.action} score ${signal.score} | SL ${this.config.stopLossPct}% / TP ${this.config.takeProfitPct}%`,
+      reason: `${signal.action} score ${signal.score} conf ${signal.confidence}%${signal.extras?.pattern ? ` · ${signal.extras.pattern}` : ''}${signal.extras?.divergence ? ` · ${signal.extras.divergence} div` : ''} | SL ${slPct.toFixed(1)}% / TP ${tpPct.toFixed(1)}%`,
       feeUsdt,
     };
     this.trades.push(record);

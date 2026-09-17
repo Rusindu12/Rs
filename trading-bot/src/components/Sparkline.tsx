@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Polyline, Polygon, Text as SvgText } from 'react-native-svg';
 import { colors } from '../theme';
 
 /** Lightweight SVG sparkline for price history. */
@@ -25,12 +25,15 @@ export function Sparkline({
     .map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - ((v - min) / range) * (height - 6)).toFixed(1)}`)
     .join(' ');
   const up = positive ?? data[data.length - 1] >= data[0];
+  const stroke = up ? colors.green : colors.red;
+  const fillPts = `0,${height} ${pts} ${width},${height}`;
   return (
     <Svg width={width} height={height}>
+      <Polygon points={fillPts} fill={stroke} opacity={0.13} />
       <Polyline
         points={pts}
         fill="none"
-        stroke={up ? colors.green : colors.red}
+        stroke={stroke}
         strokeWidth={1.6}
         strokeLinejoin="round"
         strokeLinecap="round"

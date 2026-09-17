@@ -108,6 +108,26 @@ export function SettingsScreen() {
           hint="Pauses new entries once daily realized losses reach this share of equity"
         />
 
+        {/* AI v2 toggles */}
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.toggleTitle}>ATR-aware stops</Text>
+            <Text style={styles.toggleHint}>
+              Widens stop-loss / take-profit with market volatility (max 2× your %), so volatile coins aren't clipped instantly.
+            </Text>
+          </View>
+          <Toggle value={config.useAtrStops} onChange={(v) => setConfig({ useAtrStops: v })} />
+        </View>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.toggleTitle}>Confidence-based sizing</Text>
+            <Text style={styles.toggleHint}>
+              Scales each position between 0.75×–1× of your trade size by AI confidence (100% = full size).
+            </Text>
+          </View>
+          <Toggle value={config.confidenceSizing} onChange={(v) => setConfig({ confidenceSizing: v })} />
+        </View>
+
         <Text style={styles.label}>Minimum signal to trade</Text>
         <Segmented
           options={[
@@ -182,7 +202,9 @@ export function SettingsScreen() {
       <Card>
         <CardTitle>ABOUT</CardTitle>
         <Row left="App" right="AI Trading Bot v1.0.0" />
-        <Row left="Engine" right="7-factor score + 5-timeframe confluence" />
+        <Row left="Engine" right="AI v2 — 11 scored factors + 5-TF confluence" />
+        <Row left="Patterns" right="Engulfing · Hammer · Stars · Doji + RSI divergence" />
+        <Row left="Regime" right="ADX trend gate · ATR stops · confidence sizing" />
         <Row left="Indicators" right="RSI · MACD · BBands · EMA · Stoch · ATR · VWAP · Ichimoku · Fib · Volume Profile" />
         <Row left="Credential storage" right="AES-256-GCM + Android Keystore" />
       </Card>

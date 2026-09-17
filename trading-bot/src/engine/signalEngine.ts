@@ -17,6 +17,7 @@ import {
   vwap,
   type Candle,
 } from '../indicators/indicators';
+import { adx, detectCandlePattern, detectRsiDivergence } from '../indicators/advanced';
 import type {
   IndicatorSnapshot,
   Signal,
@@ -24,6 +25,15 @@ import type {
   SymbolMarketData,
 } from './types';
 import type { Timeframe } from '../config';
+
+/** Higher timeframes carry more weight in the confluence mean. */
+const TF_WEIGHTS: Partial<Record<Timeframe, number>> = {
+  '1m': 0.5,
+  '5m': 1,
+  '15m': 1.5,
+  '1h': 2,
+  '4h': 2.5,
+};
 
 /**
  * Compute every indicator we track for a candle series (primary timeframe).
@@ -95,17 +105,23 @@ export function computeIndicators(c: Candle[]): IndicatorSnapshot {
   };
 }
 
-/** Multi-timeframe confluence: mean of each timeframe's core score, capped at ±15. */
+/** Multi-timeframe confluence: higher-TF-weighted mean of core scores, capped at ±15. */
 export function multiTimeframeConfluence(data: SymbolMarketData): { score: number; perTf: { tf: Timeframe; score: number }[] } {
   const perTf: { tf: Timeframe; score: number }[] = [];
   const tfs = Object.keys(data.candles) as Timeframe[];
+  let wSum = 0;
+  let wScore = 0;
   for (const tf of tfs) {
     const candles = data.candles[tf];
     if (!candles || candles.length < 60) continue;
-    perTf.push({ tf, score: coreScore(candles) });
+    const sc = coreScore(candles);
+    perTf.push({ tf, score: sc });
+    const w = TF_WEIGHTS[tf] ?? 1;
+    wSum += w;
+    wScore += sc * w;
   }
   if (!perTf.length) return { score: 0, perTf };
-  const mean = perTf.reduce((s, x) => s + x.score, 0) / perTf.length;
+  const mean = wSum > 0 ? wScore / wSum : 0;
   return { score: Math.max(-15, Math.min(15, mean)), perTf };
 }
 
@@ -276,6 +292,102 @@ export function generateSignal(data: SymbolMarketData): Signal {
     score: Math.round(mtf.score * 10) / 10,
   });
 
+  /* ---------------- AI v2: pattern / divergence / S-R / regime ------------ */
+
+  // 8) Candlestick pattern (up to ±12)
+  const pattern = detectCandlePattern(primary);
+  if (pattern) {
+    score += pattern.score;
+    factors.push({
+      name: 'Pattern',
+      detail: pattern.name,
+      score: pattern.score,
+    });
+  }
+
+  // 9) RSI divergence (±10)
+  const divergence = detectRsiDivergence(primary);
+  if (divergence) {
+    const dv = divergence === 'bullish' ? 10 : -10;
+    score += dv;
+    factors.push({
+      name: 'Divergence',
+      detail: `${divergence} RSI divergence — reversal pressure`,
+      score: dv,
+    });
+  }
+
+  // 10) Support/Resistance confluence: Volume Profile + Fibonacci + VWAP (±10)
+  let srScore = 0;
+  let srBias = 'no clear S/R interaction';
+  const vp = ind.volumeProfile;
+  const near = (lvl: number, pct: number) => Math.abs(price - lvl) / Math.max(1e-12, lvl) < pct / 100;
+  if (isFinite(vp.poc)) {
+    if (near(vp.poc, 0.4) || near(vp.val, 0.4)) {
+      srScore += 4;
+      srBias = 'at value-area support (POC/VAL)';
+    } else if (near(vp.vah, 0.4)) {
+      srScore -= 4;
+      srBias = 'at value-area resistance (VAH)';
+    } else if (price > vp.vah) {
+      srScore += 3;
+      srBias = 'breakout above value area';
+    } else if (price < vp.val) {
+      srScore -= 3;
+      srBias = 'breakdown below value area';
+    }
+  }
+  if (isFinite(ind.fib.nearest) && ind.fib.distancePct < 0.4) {
+    if (ind.fib.nearest < price) {
+      srScore += 3;
+      srBias += ' · fib support below';
+    } else {
+      srScore -= 3;
+      srBias += ' · fib resistance above';
+    }
+  }
+  if (isFinite(ind.vwap)) {
+    if (price > ind.vwap && srScore > 0) srScore += 2;
+    else if (price < ind.vwap && srScore < 0) srScore -= 2;
+  }
+  srScore = Math.max(-10, Math.min(10, srScore));
+  if (srScore !== 0) {
+    score += srScore;
+    factors.push({ name: 'S/R Zones', detail: srBias, score: srScore });
+  }
+
+  // 11) ADX trend regime (±5) — trend-following gate
+  const adxRes = adx(primary, 14);
+  const adxVal = last(adxRes.adx);
+  const emaFactor = factors.find((f) => f.name === 'EMA');
+  let regime: 'trending' | 'ranging' = 'ranging';
+  if (isFinite(adxVal) && adxVal >= 25) {
+    regime = 'trending';
+    const gate = emaFactor && emaFactor.score !== 0 ? (emaFactor.score > 0 ? 5 : -5) : 0;
+    if (gate !== 0) {
+      score += gate;
+      factors.push({
+        name: 'Regime',
+        detail: `ADX ${adxVal.toFixed(0)} — trending market ${gate > 0 ? 'supports' : 'opposes'} the trend side`,
+        score: gate,
+      });
+    } else {
+      factors.push({
+        name: 'Regime',
+        detail: `ADX ${adxVal.toFixed(0)} — trending, no clean EMA stack`,
+        score: 0,
+      });
+    }
+  } else if (isFinite(adxVal)) {
+    factors.push({
+      name: 'Regime',
+      detail: `ADX ${adxVal.toFixed(0)} — ranging market (mean-reversion weights hold)`,
+      score: 0,
+    });
+  }
+
+  const atrPct = isFinite(ind.atrPct) ? ind.atrPct : 0;
+
   // Informational context (computed in real time, displayed but not scored):
   if (isFinite(ind.vwap)) {
     factors.push({
@@ -319,15 +431,34 @@ export function generateSignal(data: SymbolMarketData): Signal {
   }
 
   const action = scoreToAction(score);
+
+  // Confidence blends the raw score with factor agreement: a big score built
+  // from a single factor is trusted less than the same score with every
+  // factor pointing the same way.
+  const scored = factors.filter((f) => !f.informational && f.score !== 0);
+  const totalMag = scored.reduce((s2, f) => s2 + Math.abs(f.score), 0);
+  const signedSum = scored.reduce((s2, f) => s2 + f.score, 0);
+  const agreement = totalMag > 0 ? Math.abs(signedSum) / totalMag : 0;
+  const confidence = Math.max(0, Math.min(100, Math.round(0.8 * Math.abs(score) + 20 * agreement)));
+
   return {
     symbol: data.symbol,
     action,
     score: Math.round(score * 10) / 10,
-    confidence: Math.max(0, Math.min(100, Math.abs(score))),
+    confidence,
     factors,
     timeframes: mtf.perTf,
     price,
     computedAt: Date.now(),
+    extras: {
+      pattern: pattern?.name,
+      divergence,
+      regime,
+      adx: isFinite(adxVal) ? Math.round(adxVal * 10) / 10 : 0,
+      expectedMovePct: Math.round(atrPct * 2 * 10) / 10,
+      atrPct: Math.round(atrPct * 100) / 100,
+      srBias,
+    },
   };
 }
 

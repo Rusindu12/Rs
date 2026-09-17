@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Badge, Button, Card, CardTitle, ConfirmModal, EmptyState, Row, Screen, StatusDot } from '../components/ui';
+import { Badge, Button, Card, CardTitle, Chip, ConfirmModal, EmptyState, Row, Screen, StatusDot, HeroCard } from '../components/ui';
 import { Sparkline, ConfidenceGauge } from '../components/Sparkline';
 import { colors } from '../theme';
 import { TOP_TICKERS } from '../config';
 import { runtime } from '../engine/runtime';
 import { useAuthStore } from '../store/authStore';
 import { useBotStore } from '../store/botStore';
-import { marketSentiment, useMarketStore } from '../store/marketStore';
+import { marketSentiment, useMarketStore, type TickerView } from '../store/marketStore';
 import { fmtPct, fmtPrice, fmtUsd, baseAsset } from '../utils/format';
 
 interface Portfolio {
@@ -31,7 +31,6 @@ export function DashboardScreen() {
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -53,13 +52,22 @@ export function DashboardScreen() {
 
   const sentiment = useMemo(() => marketSentiment(tickers), [tickers]);
 
-  const aiConfidence = useMemo(() => {
-    if (!signals.length) return 0;
-    return Math.max(...signals.map((s) => s.confidence));
+  /** Market breadth: share of watchlist symbols up over 24h. */
+  const breadth = useMemo(() => {
+    const list = TOP_TICKERS.map((s) => tickers[s]).filter(Boolean) as TickerView[];
+    if (!list.length) return { upPct: 0, up: 0, total: 0 };
+    const up = list.filter((t) => t.changePct > 0).length;
+    return { upPct: (up / list.length) * 100, up, total: list.length };
+  }, [tickers]);
+
+  const best = useMemo(() => {
+    if (!signals.length) return null;
+    return signals.reduce((a, b) => (b.confidence > a.confidence ? b : a));
   }, [signals]);
 
+  const aiConfidence = signals.length ? best!.confidence : 0;
+
   const pnlBuckets = useMemo(() => {
-    // Realized PnL from closed trades + unrealized from open positions.
     const closed = trades.filter((t) => t.status === 'CLOSED');
     const inRange = (from: number) =>
       closed.filter((t) => (t.closedAt ?? 0) >= from).reduce((s, t) => s + (t.pnlUsdt ?? 0), 0);
@@ -81,13 +89,6 @@ export function DashboardScreen() {
   const equity = portfolio?.equityUsdt ?? 0;
   const pctOf = (v: number) => (equity > 0 ? (v / equity) * 100 : 0);
 
-  const doEmergencyStop = async () => {
-    setBusy(true);
-    await runtime.emergencyStop();
-    setBusy(false);
-    setConfirmStop(false);
-  };
-
   return (
     <Screen>
       {/* connection strip */}
@@ -98,30 +99,37 @@ export function DashboardScreen() {
         </View>
         <View style={styles.connItem}>
           <StatusDot ok={wsConnected} />
-          <Text style={styles.connText}>WebSocket</Text>
+          <Text style={styles.connText}>WS</Text>
         </View>
         {demoMode ? <Badge text="DEMO" tone="gold" small /> : null}
         <Badge text={environment === 'live' ? 'LIVE PRICES' : 'TESTNET'} tone={environment === 'live' ? 'gold' : 'info'} small />
         <Badge text={portfolio ? portfolio.source.toUpperCase() : '…'} tone="neutral" small />
       </View>
 
-      {/* portfolio */}
-      <Card>
-        <CardTitle right={<Badge text={running ? 'BOT RUNNING' : 'BOT IDLE'} tone={running ? 'buy' : 'neutral'} small />}>
-          PORTFOLIO VALUE
-        </CardTitle>
-        <Text style={styles.equity}>{fmtUsd(equity)}</Text>
-        <Text style={styles.equityPnl}>
-          {fmtUsd(pnlBuckets.daily, { sign: true })} today · unrealized {fmtUsd(pnlBuckets.unrealized, { sign: true })}
+      {/* hero — portfolio value */}
+      <HeroCard>
+        <View style={styles.heroHead}>
+          <Text style={styles.heroLabel}>PORTFOLIO VALUE</Text>
+          <Badge text={running ? '● BOT RUNNING' : 'BOT IDLE'} tone={running ? 'buy' : 'neutral'} small />
+        </View>
+        <Text style={styles.heroEquity}>{fmtUsd(equity)}</Text>
+        <Text style={styles.heroSub}>
+          <Text style={{ color: pnlBuckets.daily >= 0 ? colors.green : colors.red }}>
+            {fmtUsd(pnlBuckets.daily, { sign: true })} today
+          </Text>
+          <Text style={styles.heroDot}> · unrealized </Text>
+          <Text style={{ color: pnlBuckets.unrealized >= 0 ? colors.green : colors.red }}>
+            {fmtUsd(pnlBuckets.unrealized, { sign: true })}
+          </Text>
         </Text>
         <View style={styles.assetRow}>
-          <AssetPill asset="USDT" amount={portfolio?.usdt} price={1} />
-          <AssetPill asset="BTC" amount={portfolio?.btc} price={tickers.BTCUSDT?.price} />
-          <AssetPill asset="ETH" amount={portfolio?.eth} price={tickers.ETHUSDT?.price} />
+          <AssetPill asset="USDT" glyph="$" amount={portfolio?.usdt} price={1} />
+          <AssetPill asset="BTC" glyph="₿" amount={portfolio?.btc} price={tickers.BTCUSDT?.price} />
+          <AssetPill asset="ETH" glyph="Ξ" amount={portfolio?.eth} price={tickers.ETHUSDT?.price} />
         </View>
-      </Card>
+      </HeroCard>
 
-      {/* PnL */}
+      {/* P/L grid */}
       <Card>
         <CardTitle>PROFIT / LOSS</CardTitle>
         <View style={styles.pnlGrid}>
@@ -133,28 +141,33 @@ export function DashboardScreen() {
         <Row left="Active trades" right={`${positions.length} open · ${trades.filter((t) => t.status === 'CLOSED').length} closed`} />
       </Card>
 
-      {/* AI confidence + sentiment */}
+      {/* AI engine */}
       <Card>
-        <CardTitle>AI ENGINE</CardTitle>
+        <CardTitle>🧠 AI ENGINE</CardTitle>
         <View style={styles.aiRow}>
-          <ConfidenceGauge value={aiConfidence} label="AI CONFIDENCE" />
+          <ConfidenceGauge value={aiConfidence} label="CONFIDENCE" />
           <View style={styles.aiMeta}>
-            <Text style={styles.sentimentLabel}>MARKET SENTIMENT</Text>
+            <Text style={styles.aiSmallLabel}>MARKET SENTIMENT</Text>
             <Badge
               text={sentiment.label}
               tone={sentiment.label === 'Bullish' ? 'buy' : sentiment.label === 'Bearish' ? 'sell' : 'neutral'}
             />
-            <Text style={styles.sentimentSub}>
-              24h avg {fmtPct(sentiment.avgChangePct)} · {signals.length} symbols analysed
+            {/* breadth bar */}
+            <View style={styles.breadthTrack}>
+              <View style={[styles.breadthUp, { width: `${breadth.upPct}%` }]} />
+            </View>
+            <Text style={styles.aiTiny}>
+              {breadth.up}/{breadth.total} up (24h) · avg {fmtPct(sentiment.avgChangePct)}
             </Text>
-            <Text style={styles.sentimentSub}>
-              Best signal:{' '}
-              {signals.length
-                ? `${signals.reduce((a, b) => (b.confidence > a.confidence ? b : a)).symbol} ${
-                    signals.reduce((a, b) => (b.confidence > a.confidence ? b : a)).action
-                  }`
-                : '—'}
-            </Text>
+            {best ? (
+              <Chip
+                label="TOP SIGNAL"
+                value={`${best.symbol} ${best.action.replace('_', ' ')} · ${best.confidence}%`}
+                tone={best.action.includes('BUY') ? 'buy' : best.action.includes('SELL') ? 'sell' : 'gold'}
+              />
+            ) : (
+              <Text style={styles.aiTiny}>Run the engine to generate signals</Text>
+            )}
           </View>
         </View>
       </Card>
@@ -164,14 +177,14 @@ export function DashboardScreen() {
         <CardTitle>QUICK ACTIONS</CardTitle>
         <View style={styles.actionsRow}>
           <Button
-            label="▶ Start Bot"
+            label="▶ Start"
             tone="success"
             disabled={running}
             onPress={() => runtime.startBot()}
             style={styles.actionBtn}
           />
           <Button
-            label="⏸ Stop Bot"
+            label="⏸ Stop"
             tone="ghost"
             disabled={!running}
             onPress={() => runtime.stopBot()}
@@ -190,32 +203,71 @@ export function DashboardScreen() {
           TOP_TICKERS.map((sym) => {
             const t = tickers[sym];
             if (!t) return null;
-            return (
-              <View key={sym} style={styles.tickerRow}>
-                <View style={styles.tickerName}>
-                  <Text style={styles.tickerSymbol}>{baseAsset(sym)}</Text>
-                  <Text style={styles.tickerVol}>Vol {fmtUsd(t.quoteVolume, { sign: false })}</Text>
-                </View>
-                <Sparkline data={t.history} positive={t.changePct >= 0} />
-                <View style={styles.tickerPrice}>
-                  <Text style={styles.tickerPriceText}>{fmtPrice(t.price)}</Text>
-                  <Text style={[styles.tickerChange, { color: t.changePct >= 0 ? colors.green : colors.red }]}>
-                    {fmtPct(t.changePct)}
-                  </Text>
-                </View>
-              </View>
-            );
+            return <TickerRow key={sym} ticker={t} />;
           })
         )}
       </Card>
+
+      <ConfirmModal
+        visible={confirmStop}
+        title="Emergency stop everything?"
+        message="The bot halts, ALL open positions are market-closed at current prices, and resting orders are cancelled. This cannot be undone."
+        confirmLabel="Close everything"
+        danger
+        onCancel={() => setConfirmStop(false)}
+        onConfirm={() => {
+          setConfirmStop(false);
+          void runtime.emergencyStop();
+        }}
+      />
     </Screen>
   );
 }
 
-function AssetPill({ asset, amount, price }: { asset: string; amount?: number; price?: number }) {
+/** Ticker row with a short green/red flash when the price ticks. */
+function TickerRow({ ticker }: { ticker: TickerView }) {
+  const prev = useRef(ticker.price);
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+
+  useEffect(() => {
+    if (ticker.price !== prev.current) {
+      const dir = ticker.price > prev.current ? 'up' : 'down';
+      prev.current = ticker.price;
+      setFlash(dir);
+      const t = setTimeout(() => setFlash(null), 700);
+      return () => clearTimeout(t);
+    }
+  }, [ticker.price]);
+
+  return (
+    <View style={[styles.tickerRow, flash ? { backgroundColor: flash === 'up' ? '#0ECB8114' : '#F6465D14' } : null]}>
+      <View style={styles.tickerName}>
+        <Text style={styles.tickerSymbol}>{baseAsset(ticker.symbol)}</Text>
+        <Text style={styles.tickerVol}>Vol {fmtUsd(ticker.quoteVolume, { sign: false })}</Text>
+      </View>
+      <Sparkline data={ticker.history} positive={ticker.changePct >= 0} />
+      <View style={styles.tickerPrice}>
+        <Text
+          style={[
+            styles.tickerPriceText,
+            flash ? { color: flash === 'up' ? colors.green : colors.red } : null,
+          ]}
+        >
+          {fmtPrice(ticker.price)}
+        </Text>
+        <Text style={[styles.tickerChange, { color: ticker.changePct >= 0 ? colors.green : colors.red }]}>
+          {ticker.changePct >= 0 ? '▲' : '▼'} {fmtPct(Math.abs(ticker.changePct), { sign: false })}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function AssetPill({ asset, glyph, amount, price }: { asset: string; glyph: string; amount?: number; price?: number }) {
   const value = amount != null && price != null ? amount * price : null;
   return (
     <View style={styles.assetPill}>
+      <Text style={styles.assetGlyph}>{glyph}</Text>
       <Text style={styles.assetName}>{asset}</Text>
       <Text style={styles.assetAmount}>{amount != null ? amount.toFixed(asset === 'USDT' ? 2 : 6) : '—'}</Text>
       <Text style={styles.assetValue}>{value != null ? fmtUsd(value) : '—'}</Text>
@@ -226,7 +278,7 @@ function AssetPill({ asset, amount, price }: { asset: string; amount?: number; p
 function PnlCell({ label, value, pct }: { label: string; value: number; pct: number }) {
   const c = value > 0 ? colors.green : value < 0 ? colors.red : colors.textDim;
   return (
-    <View style={styles.pnlCell}>
+    <View style={[styles.pnlCell, { borderColor: c + '33', backgroundColor: c + '0D' }]}>
       <Text style={styles.pnlLabel}>{label}</Text>
       <Text style={[styles.pnlValue, { color: c }]}>{fmtUsd(value, { sign: true })}</Text>
       <Text style={[styles.pnlPct, { color: c }]}>{fmtPct(pct)}</Text>
@@ -235,52 +287,63 @@ function PnlCell({ label, value, pct }: { label: string; value: number; pct: num
 }
 
 const styles = StyleSheet.create({
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12 },
+  connRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   connItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connText: { color: colors.textDim, fontSize: 11.5 },
-  equity: { color: colors.text, fontSize: 34, fontWeight: '900', letterSpacing: 0.4 },
-  equityPnl: { color: colors.textDim, fontSize: 12.5, marginTop: 2 },
-  assetRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  heroHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroLabel: { color: colors.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  heroEquity: { color: colors.text, fontSize: 36, fontWeight: '900', letterSpacing: 0.4, marginTop: 8 },
+  heroSub: { color: colors.textDim, fontSize: 12.5, marginTop: 4 },
+  heroDot: { color: colors.textFaint },
+  assetRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   assetPill: {
     flex: 1,
-    backgroundColor: colors.bgElevated,
-    borderRadius: 10,
+    backgroundColor: '#0B0E1199',
+    borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#2B3340',
   },
-  assetName: { color: colors.gold, fontSize: 11, fontWeight: '800' },
-  assetAmount: { color: colors.text, fontSize: 13, fontWeight: '700', marginTop: 3 },
-  assetValue: { color: colors.textDim, fontSize: 11, marginTop: 2 },
-  pnlGrid: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  assetGlyph: { color: colors.gold, fontSize: 14, fontWeight: '900' },
+  assetName: { color: colors.textDim, fontSize: 10, fontWeight: '700', marginTop: 2 },
+  assetAmount: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 4 },
+  assetValue: { color: colors.textFaint, fontSize: 10.5, marginTop: 2 },
+  pnlGrid: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   pnlCell: {
     flex: 1,
-    backgroundColor: colors.bgElevated,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
   },
   pnlLabel: { color: colors.textDim, fontSize: 10.5, fontWeight: '600' },
   pnlValue: { fontSize: 12.5, fontWeight: '800', marginTop: 4 },
   pnlPct: { fontSize: 10.5, marginTop: 2 },
-  aiRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  aiRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   aiMeta: { flex: 1, gap: 7 },
-  sentimentLabel: { color: colors.textDim, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.5 },
-  sentimentSub: { color: colors.textFaint, fontSize: 11.5 },
+  aiSmallLabel: { color: colors.textDim, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6 },
+  aiTiny: { color: colors.textFaint, fontSize: 11 },
+  breadthTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.redDim,
+    overflow: 'hidden',
+  },
+  breadthUp: { height: 6, backgroundColor: colors.green, borderRadius: 3 },
   actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   actionBtn: { flex: 1 },
   tickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     gap: 10,
+    borderRadius: 10,
   },
   tickerName: { flex: 1 },
   tickerSymbol: { color: colors.text, fontSize: 13.5, fontWeight: '800' },
   tickerVol: { color: colors.textFaint, fontSize: 10 },
-  tickerPrice: { alignItems: 'flex-end', width: 96 },
+  tickerPrice: { alignItems: 'flex-end', width: 100 },
   tickerPriceText: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  tickerChange: { fontSize: 11.5, fontWeight: '700' },
+  tickerChange: { fontSize: 11, fontWeight: '700' },
 });
