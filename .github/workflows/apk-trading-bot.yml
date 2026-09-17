@@ -229,16 +229,13 @@ jobs:
           PY
 
   web:
-    name: Export web app → GitHub Pages + web-app branch
+    name: Export web app → CDN branch + GitHub Pages
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: apk
     defaults:
       run:
         working-directory: trading-bot
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -304,23 +301,6 @@ jobs:
       # NOTE: creating the Pages site needs a one-time owner action
       # (Settings → Pages → Source). These steps stay green either way and
       # take over automatically once Pages is enabled.
-      # The github-pages environment (default protection rules) only accepts
-      # deployments from the repository's default branch (main).
-      - name: Deploy to GitHub Pages (main branch only)
-        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v4
-        with:
-          enablement: true
-      - name: Upload Pages artifact
-        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: trading-bot/dist
-      - name: Deploy to GitHub Pages
-        id: deployment
-        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
-        uses: actions/deploy-pages@v4
-
       - name: Push web build to the web-app branch
         if: steps.mode.outputs.publish == 'true'
         env:
@@ -340,6 +320,13 @@ jobs:
           echo "✓ pushed the static web app to refs/heads/web-app"
           echo "  (host it anywhere: GitHub Pages ← web-app branch, Netlify, Vercel, …)"
 
+      - name: Upload Pages artifact (main only, optional)
+        if: steps.mode.outputs.publish == 'true' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: trading-bot/dist
+
       - name: Attach web zip to the release
         if: steps.mode.outputs.publish == 'true'
         env:
@@ -353,3 +340,11 @@ jobs:
             || echo "::warning::could not upload the single-file HTML to the release"
           echo "web zip: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${WEB_ZIP}" >> "$GITHUB_STEP_SUMMARY"
           echo "single-file app: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/AI-Trading-Bot.html" >> "$GITHUB_STEP_SUMMARY"
+
+      # Optional finishing touch: GitHub Pages. The auto-created github-pages
+      # environment only accepts deployments from the default branch, so this
+      # is attempted on main and simply skipped elsewhere — never fatal.
+      - name: Deploy to GitHub Pages (main only, optional)
+        if: steps.mode.outputs.publish == 'true'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
