@@ -1,0 +1,358 @@
+# AI Trading Bot — build pipeline (trading-bot/).
+#
+#  * apk job:  typecheck → unit tests → expo prebuild → assembleRelease
+#              (release bundles the JS into the APK — a debug APK would boot to
+#              "Unable to load script" without Metro. Release is still signed
+#              with the committed debug.keystore, so it installs anywhere.)
+#  * web job:  expo export → static SPA → pushed to the `web-app` branch and
+#              zipped onto the release (host on any static host / GitHub Pages).
+#
+# Pushes to main (or commit subjects with [publish-apk]) publish both.
+name: Build Trading Bot APK + Web
+
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - 'trading-bot/**'
+      - '.github/workflows/apk-trading-bot.yml'
+  pull_request:
+    paths:
+      - 'trading-bot/**'
+      - '.github/workflows/apk-trading-bot.yml'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Update the rolling trading-bot-apk release + web-app branch'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: trading-bot-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK: trading-bot/android/app/build/outputs/apk/release/app-release.apk
+  WEB_ZIP: AI-Trading-Bot-web.zip
+  RELEASE_TAG: trading-bot-apk
+  APK_ASSET: AI-Trading-Bot.apk
+
+jobs:
+  apk:
+    name: Test + assemble release APK (bundled JS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: trading-bot
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: trading-bot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (indicators · signal engine · risk · crypto · Binance client)
+        run: npm test
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild -p android --no-install
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # ubuntu-latest ships the Android SDK with pre-accepted licences; Gradle
+      # auto-installs any missing platform/build-tools components.
+
+      # Release (not debug): debug APKs skip JS bundling and boot to
+      # "Unable to load script" without Metro. The RN template signs release
+      # builds with android/app/debug.keystore, which is committed.
+      - name: Build release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
+
+      # Sandboxes that can only speak git can fetch refs/heads/ci-debug to read it.
+      - name: Drop build log on failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if [ -f trading-bot/android/build.log ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout --detach -q
+            tail -c 300000 trading-bot/android/build.log > ci-build-log.txt
+            git add -f ci-build-log.txt
+            git commit -qm "ci build log: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+            git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/ci-debug
+            echo "log pushed to refs/heads/ci-debug"
+          fi
+
+      - name: Collect build info
+        id: info
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"  # job default working-directory is trading-bot/
+          test -f "$APK" || { echo "::error::APK was not produced"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/publish"
+          cp "$APK" "$RUNNER_TEMP/publish/$APK_ASSET"
+          SIZE=$(du -h "$RUNNER_TEMP/publish/$APK_ASSET" | cut -f1)
+          SHA=$(sha256sum "$RUNNER_TEMP/publish/$APK_ASSET" | cut -c1-16)
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/publish/$APK_ASSET" >> "$GITHUB_OUTPUT"
+          echo "Built $APK ($SIZE)"
+
+      - name: Upload APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Trading-Bot-debug-apk
+          path: ${{ steps.info.outputs.path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      # Publish on: pushes to main, commit subjects containing [publish-apk],
+      # or a manual run with the checkbox ticked.
+      - name: Decide what this run publishes
+        id: mode
+        run: |
+          set -uo pipefail
+          event="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          subject="$(git log -1 --pretty=%s)"
+          pub_in="${{ github.event.inputs.publish_release }}"
+          publish=false
+          if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then publish=true; fi
+          case "$subject" in *"[publish-apk]"*) publish=true ;; esac
+          if [ "$event" = "workflow_dispatch" ] && [ "$pub_in" = "true" ]; then publish=true; fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish (event=$event, subject: $subject)"
+
+      - name: Publish APK on the Releases page
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIZE: ${{ steps.info.outputs.size }}
+          SHA: ${{ steps.info.outputs.sha }}
+          STAGED: ${{ steps.info.outputs.path }}
+        run: |
+          set -uo pipefail
+          cd "$GITHUB_WORKSPACE"  # gh needs a git repo context
+
+          notes="$RUNNER_TEMP/notes.md"
+          cat > "$notes" <<EOF
+          AI Trading Bot — auto-built APK (\`${GITHUB_SHA::7}\`).
+
+          * Size: ${SIZE} · sha256 \`${SHA}...\`
+          * Signed with the Android debug key — install directly on any device (Android 7.0+, API 24+).
+          * **Release build** — the JS bundle is packed inside, no dev server needed.
+          * React Native (Expo) · Binance REST + WebSocket · AI signal engine verified by \`npm test\` before every build.
+          * Web version: the \`web-app\` branch hosts the same app as a static site (\`${WEB_ZIP}\` below).
+
+          | File | Description |
+          |------|-------------|
+          | \`${APK_ASSET}\` | Android app, ready to install |
+          | \`${WEB_ZIP}\` | static web build — unzip and host anywhere |
+
+          > ⚠️ Trading crypto is risky — start on **testnet**. Built by \`.github/workflows/apk-trading-bot.yml\`.
+          EOF
+
+          gh release create "$RELEASE_TAG" --title "AI Trading Bot — App" --notes-file "$notes" \
+                --target "$GITHUB_SHA" --latest 2>"$RUNNER_TEMP/err" \
+            || gh release edit "$RELEASE_TAG" --title "AI Trading Bot — App" --notes-file "$notes" \
+                 --latest --target "$GITHUB_SHA" 2>>"$RUNNER_TEMP/err" \
+            || true
+
+          if ! gh release upload "$RELEASE_TAG" "$STAGED" --clobber 2>>"$RUNNER_TEMP/err"; then
+            echo "::warning::Could not publish the APK to Releases. $(tail -n 3 "$RUNNER_TEMP/err" | tr '\n' ' ')"
+            echo "::warning::If the token is read-only, enable Settings → Actions → General → Workflow permissions → 'Read and write permissions'."
+            echo "The APK is still available in this run's Artifacts section (AI-Trading-Bot-debug-apk)."
+            exit 0
+          fi
+
+          tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | cut -f1)"
+          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+            git push -f origin "refs/tags/$RELEASE_TAG" 2>>"$RUNNER_TEMP/err" \
+              || echo "::warning::could not move the ${RELEASE_TAG} tag"
+          fi
+
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
+          {
+            echo "### 📱 AI Trading Bot APK published"
+            echo ""
+            echo "Download & install on your phone: **<${url}>**"
+            echo ""
+            echo "Release page: <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}> · size ${SIZE} · sha256 \`${SHA}...\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add a QR code for phone install
+        if: steps.mode.outputs.publish == 'true'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          cd "$GITHUB_WORKSPACE"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
+          python3 -m pip install --quiet segno
+          python3 - "$url" <<'PY'
+          import sys, segno
+          qr = segno.make(sys.argv[1], error='m')
+          print("Scan with your phone camera to download the APK:")
+          qr.terminal(compact=True, dark="  ", light="██")
+          PY
+
+  web:
+    name: Export web app → GitHub Pages + web-app branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: apk
+    defaults:
+      run:
+        working-directory: trading-bot
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: trading-bot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export static web app
+        run: npx expo export --platform web
+
+      # Metro emits absolute asset URLs (/_expo/...). Rewriting them to relative
+      # paths lets the site run under ANY sub-path (GitHub Pages /Rs/, Netlify…).
+      # Pack everything into ONE self-contained HTML file — download and
+      # double-click to run the whole app, no hosting required.
+      - name: Pack single-file HTML app
+        run: node scripts/make-single-file.mjs
+
+      - name: Rewrite asset paths to relative
+        run: |
+          cd dist
+          sed -i 's|"\(/favicon.ico\)"|"./favicon.ico"|g' index.html
+          sed -i 's|"\(/_expo/\)\([^"]*\)"|"./_expo/\2"|g' index.html
+          touch .nojekyll
+          grep -o 'src="[^"]*"' index.html
+
+      - name: Zip the web build
+        run: |
+          cd dist && zip -qr "../$WEB_ZIP" . -x AI-Trading-Bot.html && cd ..
+          ls -la "$WEB_ZIP"
+
+      - name: Upload web zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Trading-Bot-web
+          path: trading-bot/AI-Trading-Bot-web.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Decide whether to publish
+        id: mode
+        run: |
+          set -uo pipefail
+          event="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          subject="$(git log -1 --pretty=%s)"
+          pub_in="${{ github.event.inputs.publish_release }}"
+          publish=false
+          if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then publish=true; fi
+          case "$subject" in *"[publish-apk]"*) publish=true ;; esac
+          if [ "$event" = "workflow_dispatch" ] && [ "$pub_in" = "true" ]; then publish=true; fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      # Zero-config hosting: enable Pages (if needed) and deploy the dist/
+      # folder. Works under the /Rs/ sub-path because asset URLs are relative.
+      # NOTE: creating the Pages site needs a one-time owner action
+      # (Settings → Pages → Source). These steps stay green either way and
+      # take over automatically once Pages is enabled.
+      - name: Configure GitHub Pages
+        if: steps.mode.outputs.publish == 'true'
+        uses: actions/configure-pages@v4
+        with:
+          enablement: true
+        continue-on-error: true
+
+      - name: Upload Pages artifact
+        if: steps.mode.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: trading-bot/dist
+        continue-on-error: true
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: steps.mode.outputs.publish == 'true'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Push web build to the web-app branch
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          drop="$RUNNER_TEMP/web-drop"
+          git init -q "$drop"
+          cd "$drop"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q --orphan web-app
+          cp -r "$GITHUB_WORKSPACE/trading-bot/dist"/. .
+          git add -f -A
+          git commit -qm "web app build: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/web-app
+          echo "✓ pushed the static web app to refs/heads/web-app"
+          echo "  (host it anywhere: GitHub Pages ← web-app branch, Netlify, Vercel, …)"
+
+      - name: Attach web zip to the release
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          cd "$GITHUB_WORKSPACE"
+          gh release upload "$RELEASE_TAG" "trading-bot/$WEB_ZIP" --clobber 2>&1 | tail -2 \
+            || echo "::warning::could not upload $WEB_ZIP to the release"
+          gh release upload "$RELEASE_TAG" "trading-bot/dist/AI-Trading-Bot.html" --clobber 2>&1 | tail -2 \
+            || echo "::warning::could not upload the single-file HTML to the release"
+          echo "web zip: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${WEB_ZIP}" >> "$GITHUB_STEP_SUMMARY"
+          echo "single-file app: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/AI-Trading-Bot.html" >> "$GITHUB_STEP_SUMMARY"
