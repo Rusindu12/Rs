@@ -1,8 +1,8 @@
 # 🤖 AI Trading Bot (Android)
 
 A complete **React Native (Expo)** Android app that connects to the **Binance API** for live
-cryptocurrency trading, powered by an on-device **AI signal engine** (7 scored factors,
-10 technical indicators, 5-timeframe confluence) with a full risk-management layer.
+cryptocurrency trading, powered by an on-device **AI signal engine** (11 scored factors,
+14 indicators, 5-timeframe confluence, pattern & divergence recognition) with a full risk-management layer.
 
 > ⚠️ **Disclaimer** — trading cryptocurrency is highly volatile and can lose money. This app is
 > educational software, not financial advice. It defaults to **Binance Testnet**: start there,
@@ -42,20 +42,36 @@ verified engine.
 ### 3 · AI trading engine
 Indicators computed in real time on every cycle, per symbol, per timeframe:
 
-| Indicator | Parameters | Role |
+### The AI v2 engine — 11 scored factors + context
+
+Core spec factors (unchanged weights):
+
+| Factor | Parameters | Score |
 |---|---|---|
-| RSI | 14 (Wilder) | scored factor (±20) |
-| MACD | 12 / 26 / 9 | scored factor (±15) |
-| Bollinger Bands | 20, 2σ | scored factor (±15) |
-| EMA stack | 9 / 21 / 50 / 200 | scored factor (±20) |
-| Volume confirmation | 20-avg, ×1.5 | scored factor (±10, trend-directional) |
-| Stochastic | 14 / 3 / 3 | scored factor (±10) |
-| **Multi-timeframe confluence** | 1m · 5m · 15m · 1h · 4h | scored factor (±15, capped mean) |
-| ATR | 14 (Wilder) | volatility context |
-| VWAP | rolling (HLCV) | context |
-| Ichimoku Cloud | 9 / 26 / 52, ±26 displacement | context |
-| Fibonacci retracement | swing high/low, 7 levels | context |
-| Volume Profile | 24 bins, POC + 70 % value area | context |
+| RSI | 14 (Wilder) | ±20 |
+| MACD | 12 / 26 / 9 | ±15 |
+| Bollinger Bands | 20, 2σ | ±15 |
+| EMA stack | 9 / 21 / 50 / 200 | ±20 |
+| Volume confirmation | 20-avg, ×1.5 | ±10 (trend-directional) |
+| Stochastic | 14 / 3 / 3 | ±10 |
+| Multi-TF confluence | 1m · 5m · 15m · 1h · 4h | ±15 (higher-TF **weighted** mean) |
+
+**AI v2 additions** (new):
+
+| Factor | What it does | Score |
+|---|---|---|
+| 🕯 Candle patterns | Bullish/bearish engulfing, hammer, shooting star, morning/evening star, doji | up to ±12 |
+| ↔ RSI divergence | Price makes a lower low while RSI makes a higher low (and the bearish mirror) | ±10 |
+| 🎯 S/R zones | Volume-Profile POC/VAH/VAL + Fibonacci confluence + VWAP confirmation | ±10 |
+| 📈 ADX regime | Trend gate: in trending markets (ADX ≥ 25) rewards trend-aligned setups, opposes counter-trend ones | ±5 |
+
+Context (computed every cycle, shown in the breakdown): ATR volatility, VWAP position,
+Ichimoku cloud position, Fibonacci levels, Volume Profile POC + value area.
+
+**Smarter execution:**
+- **ATR-aware stops** — SL/TP widen with volatility (max 2× configured %) so volatile coins aren't clipped
+- **Confidence sizing** — positions scale 0.75×–1× with signal confidence (agreement-weighted: a score built from every factor aligning is trusted more than the same score from one factor)
+- Signal cards show pattern / divergence / regime / S-R chips and the expected move (2×ATR)
 
 Signal thresholds (exactly as designed):
 
