@@ -65,17 +65,96 @@ class AppRuntime {
     const security = await loadSecuritySettings();
     useAuthStore.getState().setBiometricEnabled(security.biometricEnabled);
 
+    const demo = (await AsyncStorage.getItem(STORAGE_KEYS.demoMode)) === '1';
+    useAuthStore.getState().setDemoMode(demo);
+
     const creds = await loadCredentials();
     useAuthStore.getState().setCredentials(creds);
     useAuthStore.getState().setHydrated(true);
 
     if (creds) {
       try {
-        this.wireCredentials(creds);
+        await this.wireCredentials(creds);
       } catch (e) {
         this.storeLogger.log('error', `credential wiring failed: ${String(e)}`);
       }
+    } else if (demo) {
+      await this.wireDemo();
     }
+  }
+
+  /**
+   * Demo mode — no API keys. Public Binance market data (websocket tickers +
+   * klines from the LIVE endpoint, both keyless) plus the paper trading
+   * ledger. Everything works except real account trading.
+   */
+  private async wireDemo(): Promise<void> {
+    this.rest = new BinanceRest('', '', 'live');
+    this.paper = new PaperProvider(10_000, (symbol) => this.prices[symbol] ?? NaN);
+    this.live = null;
+
+    this.bot = new BotEngine({
+      provider: this.paper,
+      market: { snapshot: (symbol) => this.snapshot(symbol) },
+      storage: {
+        get: <T,>(key: string) => AsyncStorage.getItem(key).then((v) => (v ? (JSON.parse(v) as T) : null)),
+        set: async <T,>(key: string, value: T) => {
+          await AsyncStorage.setItem(key, JSON.stringify(value));
+        },
+      },
+      logger: this.storeLogger,
+      providerFor: () => this.paper ?? this.live!,
+    });
+    await this.restoreBotState();
+
+    this.ws?.stop();
+    this.ws = new MarketStreams(
+      'live',
+      (tickers) => this.onTickers(tickers),
+      (connected) => useAuthStore.getState().setWsConnected(connected)
+    );
+    this.ws.start();
+
+    void this.pollRestStatus();
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = setInterval(() => void this.pollRestStatus(), 30_000);
+    this.storeLogger.log('info', 'demo mode — live market data + paper trading (no API keys)');
+  }
+
+  async enableDemoMode(): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.demoMode, '1');
+    useAuthStore.getState().setDemoMode(true);
+    await this.wireDemo();
+  }
+
+  /** Leave demo mode (returns the user to the API setup screen). */
+  async disableDemoMode(): Promise<void> {
+    await AsyncStorage.removeItem(STORAGE_KEYS.demoMode);
+    useAuthStore.getState().setDemoMode(false);
+  }
+
+  /** Shared: restore persisted bot config/positions/trades + paper ledger. */
+  private async restoreBotState(): Promise<void> {
+    if (!this.bot) return;
+    await this.bot.loadState();
+    if (!this.bot.config.symbols.length) {
+      this.bot.config.symbols = [...DEFAULT_SYMBOLS];
+      await this.bot.persistConfig();
+    }
+    const ledger = await AsyncStorage.getItem(this.paperLedgerKey);
+    if (ledger) {
+      const parsed = JSON.parse(ledger) as { usdtFree: number; assetFree: Record<string, number> };
+      this.paper = new PaperProvider(parsed.usdtFree, (symbol) => this.prices[symbol] ?? NaN, parsed);
+    }
+    const bs = useBotStore.getState();
+    bs.replaceConfig(this.bot.config);
+    bs.syncEngine({
+      positions: this.bot.positions,
+      trades: this.bot.trades,
+    });
+    bs.setRunning(this.bot.running);
+    this.storeLogger.log('info', `state restored — ${this.bot.positions.length} open position(s), ${this.bot.trades.length} trade(s)`);
+    if (this.bot.config.enabled) this.startBot();
   }
 
   /** Build REST / providers / bot around a credential set. */
@@ -101,28 +180,7 @@ class AppRuntime {
       },
     });
 
-    // Fire-and-forget state restore + ledger restore.
-    void (async () => {
-      await this.bot!.loadState();
-      if (!this.bot!.config.symbols.length) {
-        this.bot!.config.symbols = [...DEFAULT_SYMBOLS];
-        await this.bot!.persistConfig();
-      }
-      const ledger = await AsyncStorage.getItem(this.paperLedgerKey);
-      if (ledger) {
-        const parsed = JSON.parse(ledger) as { usdtFree: number; assetFree: Record<string, number> };
-        this.paper = new PaperProvider(parsed.usdtFree, (symbol) => this.prices[symbol] ?? NaN, parsed);
-      }
-      const bs = useBotStore.getState();
-      bs.replaceConfig(this.bot!.config);
-      bs.syncEngine({
-        positions: this.bot!.positions,
-        trades: this.bot!.trades,
-      });
-      bs.setRunning(this.bot!.running);
-      this.storeLogger.log('info', `state restored — ${this.bot!.positions.length} open position(s), ${this.bot!.trades.length} trade(s)`);
-      if (this.bot!.config.enabled) this.startBot();
-    })();
+    await this.restoreBotState();
 
     // Websocket market feed.
     this.ws?.stop();

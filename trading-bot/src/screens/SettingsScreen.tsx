@@ -14,6 +14,8 @@ export function SettingsScreen() {
   const environment = useAuthStore((s) => s.environment);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const biometricAvailable = useAuthStore((s) => s.biometricAvailable);
+  const demoMode = useAuthStore((s) => s.demoMode);
+  const hasCredentials = useAuthStore((s) => s.credentials) !== null;
 
   const [forgetOpen, setForgetOpen] = useState(false);
   const [liveSwitch, setLiveSwitch] = useState(false);
@@ -144,7 +146,17 @@ export function SettingsScreen() {
         </View>
       </Card>
 
-      {/* Environment */}
+      {/* Demo mode / environment */}
+      {demoMode && !hasCredentials ? (
+        <Card style={{ borderColor: colors.gold }}>
+          <CardTitle>DEMO MODE</CardTitle>
+          <Text style={styles.toggleHint}>
+            Running with live market data and paper trading ($10,000 simulated). Connect
+            your Binance API keys to unlock real testnet/live trading.
+          </Text>
+          <Button label="🔑 Connect API keys" onPress={() => void runtime.disableDemoMode()} style={{ marginTop: 10 }} />
+        </Card>
+      ) : (
       <Card>
         <CardTitle>ENVIRONMENT</CardTitle>
         <Segmented
@@ -164,6 +176,7 @@ export function SettingsScreen() {
             : '⚠️ Real orders are placed on your Binance account.'}
         </Text>
       </Card>
+      )}
 
       {/* About */}
       <Card>

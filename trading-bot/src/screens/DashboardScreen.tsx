@@ -23,6 +23,7 @@ export function DashboardScreen() {
   const wsConnected = useAuthStore((s) => s.wsConnected);
   const restStatus = useAuthStore((s) => s.restStatus);
   const environment = useAuthStore((s) => s.environment);
+  const demoMode = useAuthStore((s) => s.demoMode);
   const running = useBotStore((s) => s.running);
   const positions = useBotStore((s) => s.positions);
   const signals = useBotStore((s) => s.signals);
@@ -99,7 +100,8 @@ export function DashboardScreen() {
           <StatusDot ok={wsConnected} />
           <Text style={styles.connText}>WebSocket</Text>
         </View>
-        <Badge text={environment === 'live' ? 'LIVE' : 'TESTNET'} tone={environment === 'live' ? 'gold' : 'info'} small />
+        {demoMode ? <Badge text="DEMO" tone="gold" small /> : null}
+        <Badge text={environment === 'live' ? 'LIVE PRICES' : 'TESTNET'} tone={environment === 'live' ? 'gold' : 'info'} small />
         <Badge text={portfolio ? portfolio.source.toUpperCase() : '…'} tone="neutral" small />
       </View>
 

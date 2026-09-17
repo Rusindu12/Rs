@@ -8,13 +8,15 @@ import { ENVIRONMENTS, type Environment } from '../../config';
  * Binance API requires, with the key in the `X-MBX-APIKEY` header.
  */
 export class BinanceRest {
+  /**
+   * Keys may be empty for PUBLIC-data-only use (demo mode: tickers, klines,
+   * ping). Signed/account endpoints throw until real keys are configured.
+   */
   constructor(
     private apiKey: string,
     private apiSecret: string,
     private env: Environment = 'testnet'
-  ) {
-    if (!apiKey || !apiSecret) throw new Error('API key and secret are required');
-  }
+  ) {}
 
   setEnv(env: Environment) {
     this.env = env;
@@ -47,6 +49,9 @@ export class BinanceRest {
 
   /** GET a signed endpoint. `params` values are stringified into the query string. */
   private async signed<T>(path: string, params: Record<string, string | number | boolean> = {}, method: 'GET' | 'POST' | 'DELETE' = 'GET'): Promise<T> {
+    if (!this.apiKey || !this.apiSecret) {
+      throw new Error('Connect your Binance API keys to use this feature');
+    }
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) q.set(k, String(v));
     q.set('timestamp', String(Date.now() + this.recvWindowAdjustMs));

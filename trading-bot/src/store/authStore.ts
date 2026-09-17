@@ -15,6 +15,8 @@ interface AuthState {
   biometricAvailable: boolean;
   biometricEnabled: boolean;
   liveConfirmed: boolean;
+  /** True when the user skipped API setup — app runs on public data + paper trading. */
+  demoMode: boolean;
 
   setHydrated: (v: boolean) => void;
   setCredentials: (c: StoredCredentials | null) => void;
@@ -25,6 +27,7 @@ interface AuthState {
   setBiometricAvailable: (v: boolean) => void;
   setBiometricEnabled: (v: boolean) => void;
   setLiveConfirmed: (v: boolean) => void;
+  setDemoMode: (v: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
@@ -38,6 +41,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   biometricAvailable: false,
   biometricEnabled: false,
   liveConfirmed: false,
+  demoMode: false,
 
   setHydrated: (v) => set({ hydrated: v }),
   setCredentials: (c) =>
@@ -49,4 +53,5 @@ export const useAuthStore = create<AuthState>()((set) => ({
   setBiometricAvailable: (biometricAvailable) => set({ biometricAvailable }),
   setBiometricEnabled: (biometricEnabled) => set({ biometricEnabled }),
   setLiveConfirmed: (liveConfirmed) => set({ liveConfirmed }),
+  setDemoMode: (demoMode) => set({ demoMode }),
 }));

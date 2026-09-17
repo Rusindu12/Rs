@@ -22,8 +22,9 @@ const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('BinanceRest', () => {
-  it('rejects empty credentials', () => {
-    expect(() => new BinanceRest('', '')).toThrow();
+  it('allows keyless construction for public data but blocks signed calls', async () => {
+    const rest = new BinanceRest('', '', 'live');
+    await expect(rest.account()).rejects.toThrow('Connect your Binance API keys');
   });
 
   it('signs private requests with HMAC-SHA256 and the API-key header', async () => {

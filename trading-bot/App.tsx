@@ -22,6 +22,7 @@ export default function App() {
   const credentials = useAuthStore((s) => s.credentials);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const storeLocked = useAuthStore((s) => s.locked);
+  const demoMode = useAuthStore((s) => s.demoMode);
 
   useEffect(() => {
     void runtime.init().then(() => setBooted(true));
@@ -62,7 +63,7 @@ export default function App() {
   return (
     <>
       <StatusBar style="light" backgroundColor={colors.bg} />
-      {credentials ? <TabNavigator /> : <SetupScreen />}
+      {credentials || demoMode ? <TabNavigator /> : <SetupScreen />}
     </>
   );
 }

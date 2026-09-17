@@ -95,6 +95,16 @@ export function SetupScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Button label={busy ? 'Testing connection…' : 'Connect & Save'} onPress={connect} loading={busy} style={{ marginTop: 12 }} />
+            <Button
+              label="Skip → Explore in demo mode"
+              tone="ghost"
+              onPress={() => void runtime.enableDemoMode()}
+              style={{ marginTop: 10 }}
+            />
+            <Text style={styles.demoHint}>
+              Demo mode: live market prices + AI signals + paper trading with $10,000
+              simulated funds — no API keys needed. Connect keys anytime to enable real trading.
+            </Text>
           </Card>
 
           <Card>
@@ -145,6 +155,7 @@ const styles = StyleSheet.create({
   error: { color: colors.red, fontSize: 12.5, marginTop: 10, lineHeight: 17 },
   securityTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 6 },
   securityText: { color: colors.textDim, fontSize: 12, lineHeight: 19 },
+  demoHint: { color: colors.textFaint, fontSize: 11.5, lineHeight: 16, marginTop: 10, textAlign: 'center' },
   disclaimer: {
     color: colors.textFaint,
     fontSize: 11.5,

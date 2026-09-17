@@ -89,6 +89,7 @@ export const SIGNAL_STRENGTH_ORDER: SignalStrength[] = [
 /** Storage keys (AsyncStorage). */
 export const STORAGE_KEYS = {
   credentials: '@aitb/credentials.v1',
+  demoMode: '@aitb/demoMode.v1',
   security: '@aitb/security.v1',
   botConfig: '@aitb/bot.config.v1',
   positions: '@aitb/bot.positions.v1',
