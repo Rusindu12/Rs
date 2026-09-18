@@ -81,6 +81,7 @@ export function ActivityScreen() {
   const running = useBotStore((s) => s.running);
   const ticking = useBotStore((s) => s.ticking);
   const wsConnected = useAuthStore((s) => s.wsConnected);
+  const simulated = useAuthStore((s) => s.simulated);
   const [filter, setFilter] = useState<Filter>('all');
 
   // re-render every 15s so "time ago" stays fresh
@@ -114,7 +115,9 @@ export function ActivityScreen() {
                 {wsConnected ? 'LIVE' : 'OFFLINE'}
               </Text>
               {ticking && <View style={styles.scanningDot} />}
-              <Text style={styles.scanningText}>{ticking ? 'scanning…' : running ? 'waiting next cycle' : 'bot idle'}</Text>
+              <Text style={styles.scanningText}>
+                {simulated ? 'SIMULATED PRICES' : ticking ? 'scanning…' : running ? 'waiting next cycle' : 'bot idle'}
+              </Text>
             </View>
           }
         >

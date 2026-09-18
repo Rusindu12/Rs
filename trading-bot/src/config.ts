@@ -24,7 +24,7 @@ export const ENVIRONMENTS: Record<Environment, EnvConfig> = {
 };
 
 /** App version, shown on the Profile screen (keep in sync with app.json). */
-export const APP_VERSION = '6.4.1';
+export const APP_VERSION = '6.5.0';
 
 /** Default watchlist (top USDT pairs by liquidity). */
 export const DEFAULT_SYMBOLS = [

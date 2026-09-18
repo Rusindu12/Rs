@@ -1,5 +1,25 @@
 # Release notes
 
+## v6.5 — Offline resilience: demo trading keeps running without internet
+
+- **Demo mode works fully offline** — when the connection drops, paper trading
+  continues on a mean-reverting simulated price walk (bounded ±12% of the last
+  real price, clearly labelled "SIMULATED PRICES"). Real prices snap back the
+  moment the internet returns.
+- **Keyed (live/testnet) mode pauses safely offline** — real orders cannot be
+  sent without internet; the bot waits and RESUMES AUTOMATICALLY on reconnect
+  with an immediate catch-up tick. Open-position protection note shown.
+- **Offline banners**: blue for demo (trading continues, simulated), red for
+  keyed (paused, resumes automatically) on the Dashboard; the 💹 Activity feed
+  shows a "SIMULATED PRICES" badge while simulating.
+- **Tick hardening**: a failed order no longer kills the scan cycle; WS status
+  changes trigger immediate catch-up ticks.
+- Honest physics: real-money trading always requires internet — orders must
+  reach Binance. Offline mode is for demo/paper trading and safe pausing.
+
+Note: real trading offline is impossible by definition (orders need the internet).
+What we fixed: everything that CAN work offline now does, and nothing breaks.
+
 ## v6.4.1 — SELL-side overhaul: "does it only HOLD? doesn't it sell?"
 
 - **Two new exit paths so every BUY eventually becomes a SELL**:

@@ -88,3 +88,42 @@ describe('exit paths — every BUY is eventually SOLD', () => {
     expect(checkExit(pos, 105, 'HOLD', { score: -50 }).reason).toBe('TAKE_PROFIT');
   });
 });
+
+describe('offline price simulator (demo trading without internet)', () => {
+  it('keeps prices within ±12% of the last real price', () => {
+    const { simStep, SIM_BAND } = require('../src/engine/offlineSim');
+    const rand = require('../src/engine/offlineSim').simRng('BTCUSDT');
+    const anchor = 100;
+    let p = anchor;
+    for (let i = 0; i < 5000; i++) {
+      p = simStep(p, rand, anchor);
+      expect(p).toBeGreaterThanOrEqual(anchor * (1 - SIM_BAND) - 1e-9);
+      expect(p).toBeLessThanOrEqual(anchor * (1 + SIM_BAND) + 1e-9);
+    }
+  });
+
+  it('is deterministic per symbol and mean-reverts toward the anchor', () => {
+    const { simStep, simRng } = require('../src/engine/offlineSim');
+    const r1 = simRng('SOLUSDT');
+    const r2 = simRng('SOLUSDT');
+    let a = 100, b = 100;
+    for (let i = 0; i < 100; i++) {
+      a = simStep(a, r1, 100);
+      b = simStep(b, r2, 100);
+    }
+    expect(a).toBeCloseTo(b, 10);
+  });
+
+  it('moves prices (not a flat line) so offline paper trading still triggers signals', () => {
+    const { simStep, simRng } = require('../src/engine/offlineSim');
+    const rand = simRng('ETHUSDT');
+    let p = 2000;
+    let moved = 0;
+    for (let i = 0; i < 50; i++) {
+      const prev = p;
+      p = simStep(p, rand, 2000);
+      if (p !== prev) moved++;
+    }
+    expect(moved).toBeGreaterThan(40);
+  });
+});

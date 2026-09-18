@@ -24,6 +24,7 @@ export function DashboardScreen() {
   const restStatus = useAuthStore((s) => s.restStatus);
   const environment = useAuthStore((s) => s.environment);
   const demoMode = useAuthStore((s) => s.demoMode);
+  const simulated = useAuthStore((s) => s.simulated);
   const running = useBotStore((s) => s.running);
   const positions = useBotStore((s) => s.positions);
   const signals = useBotStore((s) => s.signals);
@@ -172,6 +173,18 @@ export function DashboardScreen() {
         </View>
       </Card>
 
+      {!wsConnected && (
+        <View style={[styles.netBanner, { backgroundColor: demoMode ? '#1E80FF14' : '#F6465D14', borderColor: demoMode ? '#1E80FF66' : '#F6465D66' }]}>
+          <Text style={[styles.netBannerTitle, { color: demoMode ? colors.blue : colors.red }]}>
+            📡 {demoMode ? 'Offline — demo trading continues with simulated prices' : 'Offline — trading paused'}
+          </Text>
+          <Text style={styles.netBannerText}>
+            {demoMode
+              ? 'Paper trading keeps running on simulated prices while the internet is down. Real prices resume automatically.'
+              : 'Real orders need internet. The bot pauses safely and resumes automatically when you are back online.'}
+          </Text>
+        </View>
+      )}
       {!running && (
         <View style={styles.idleBanner}>
           <Text style={styles.idleBannerTitle}>⚠ Bot is IDLE — trading is OFF</Text>
@@ -294,6 +307,14 @@ function PnlCell({ label, value, pct }: { label: string; value: number; pct: num
 }
 
 const styles = StyleSheet.create({
+  netBanner: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  netBannerTitle: { fontWeight: '800', fontSize: 12 },
+  netBannerText: { color: colors.textDim, fontSize: 11, marginTop: 3 },
   idleBanner: {
     backgroundColor: '#F0B90B14',
     borderColor: '#F0B90B66',

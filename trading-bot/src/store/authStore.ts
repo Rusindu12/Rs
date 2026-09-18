@@ -17,12 +17,15 @@ interface AuthState {
   liveConfirmed: boolean;
   /** True when the user skipped API setup — app runs on public data + paper trading. */
   demoMode: boolean;
+  /** True while offline-simulation prices drive demo trading. */
+  simulated: boolean;
 
   setHydrated: (v: boolean) => void;
   setCredentials: (c: StoredCredentials | null) => void;
   setEnvironment: (e: Environment) => void;
   setRestStatus: (s: RestStatus, error?: string | null) => void;
   setWsConnected: (v: boolean) => void;
+  setSimulated: (v: boolean) => void;
   setLocked: (v: boolean) => void;
   setBiometricAvailable: (v: boolean) => void;
   setBiometricEnabled: (v: boolean) => void;
@@ -42,6 +45,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   biometricEnabled: false,
   liveConfirmed: false,
   demoMode: false,
+  simulated: false,
 
   setHydrated: (v) => set({ hydrated: v }),
   setCredentials: (c) =>
@@ -54,4 +58,5 @@ export const useAuthStore = create<AuthState>()((set) => ({
   setBiometricEnabled: (biometricEnabled) => set({ biometricEnabled }),
   setLiveConfirmed: (liveConfirmed) => set({ liveConfirmed }),
   setDemoMode: (demoMode) => set({ demoMode }),
+  setSimulated: (simulated) => set({ simulated }),
 }));

@@ -15,6 +15,7 @@ import { effectiveWeights, TRAINED } from './training';
 import { LiveProvider, PaperProvider } from './providers';
 import { generateSignal } from './signalEngine';
 import type { Signal } from './types';
+import { simRng, simStep } from './offlineSim';
 import type { SymbolMarketData, TradingProvider } from './types';
 import {
   DEFAULT_SYMBOLS,
@@ -129,7 +130,7 @@ class AppRuntime {
     this.ws = new MarketStreams(
       'live',
       (tickers) => this.onTickers(tickers),
-      (connected) => useAuthStore.getState().setWsConnected(connected)
+      (connected) => this.onWsStatus(connected)
     );
     this.ws.start();
 
@@ -206,7 +207,7 @@ class AppRuntime {
     this.ws = new MarketStreams(
       creds.environment,
       (tickers) => this.onTickers(tickers),
-      (connected) => useAuthStore.getState().setWsConnected(connected)
+      (connected) => this.onWsStatus(connected)
     );
     this.ws.start();
 
@@ -222,10 +223,68 @@ class AppRuntime {
   /* ------------------------------- market data ---------------------------- */
 
   private onTickers(tickers: MiniTicker[]): void {
+    this.stopOfflineSim(false);
     useMarketStore.getState().applyTickers(tickers);
     for (const t of tickers) {
       this.prices[t.symbol] = t.close;
+      if (!this.simAnchors.has(t.symbol)) this.simAnchors.set(t.symbol, t.close);
       this.learner.onPrice(t.symbol, t.close);
+    }
+  }
+
+  /* ------------ offline resilience (demo keeps trading) ------------------- */
+
+  private simTimer: ReturnType<typeof setInterval> | null = null;
+  private simAnchors = new Map<string, number>();
+  private simRands = new Map<string, () => number>();
+  private offlineLogged = false;
+
+  /** WS/连接 status → simulate offline demo trading, or resume on reconnect. */
+  private onWsStatus(ok: boolean): void {
+    const st = useAuthStore.getState();
+    st.setWsConnected(ok);
+    if (!ok) {
+      if (st.demoMode) {
+        this.startOfflineSim();
+      } else if (!this.offlineLogged) {
+        this.offlineLogged = true;
+        this.storeLogger.log('warn', 'offline — live trading paused (orders need internet); it resumes automatically when the connection returns');
+      }
+    } else {
+      this.offlineLogged = false;
+      if (st.simulated) {
+        this.storeLogger.log('info', 'connection restored — real prices resumed');
+      }
+      this.stopOfflineSim(true);
+      void this.runTick(); // catch up immediately
+    }
+  }
+
+  /** Demo only: keep paper trading on a mean-reverting simulated price walk. */
+  private startOfflineSim(): void {
+    if (this.simTimer || !useAuthStore.getState().demoMode) return;
+    useAuthStore.getState().setSimulated(true);
+    this.storeLogger.log('warn', 'offline — demo trading continues with SIMULATED prices (paper money only)');
+    this.simTimer = setInterval(() => {
+      const symbols = new Set([...(this.bot?.config.symbols ?? []), ...Object.keys(this.prices)]);
+      for (const sym of symbols) {
+        const p = this.prices[sym];
+        if (!p || !isFinite(p) || p <= 0) continue;
+        if (!this.simAnchors.has(sym)) this.simAnchors.set(sym, p);
+        if (!this.simRands.has(sym)) this.simRands.set(sym, simRng(sym));
+        this.prices[sym] = simStep(p, this.simRands.get(sym)!, this.simAnchors.get(sym)!);
+      }
+    }, 3_000);
+  }
+
+  private stopOfflineSim(logRestore: boolean): void {
+    if (this.simTimer) {
+      clearInterval(this.simTimer);
+      this.simTimer = null;
+    }
+    if (useAuthStore.getState().simulated) {
+      useAuthStore.getState().setSimulated(false);
+      if (logRestore) this.storeLogger.log('info', 'connection restored — live prices resumed');
     }
   }
 
@@ -376,6 +435,14 @@ class AppRuntime {
 
   async runTick(): Promise<void> {
     if (!this.bot || !this.rest) return;
+    const conn = useAuthStore.getState();
+    if (!conn.wsConnected && !conn.demoMode) {
+      if (!this.offlineLogged) {
+        this.offlineLogged = true;
+        this.storeLogger.log('warn', 'offline — live trading paused; it resumes automatically when back online');
+      }
+      return;
+    }
     useBotStore.getState().syncEngine({ ticking: true, positions: this.bot.positions, trades: this.bot.trades });
     try {
       const result = await this.bot.tick();
