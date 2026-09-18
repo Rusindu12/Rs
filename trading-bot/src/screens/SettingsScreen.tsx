@@ -5,6 +5,8 @@ import { Badge, Button, Card, CardTitle, ConfirmModal, Field, Row, Screen, Segme
 import { colors } from '../theme';
 import { DEFAULT_SYMBOLS, TOP_TICKERS, type Environment } from '../config';
 import { runtime } from '../engine/runtime';
+import { tradeAlertsEnabled, setTradeAlerts } from '../services/notify';
+import { GuideScreen } from './GuideScreen';
 import { useAuthStore } from '../store/authStore';
 import { useBotStore } from '../store/botStore';
 
@@ -25,6 +27,11 @@ export function SettingsScreen() {
   };
 
   const [forgetOpen, setForgetOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [alerts, setAlerts] = useState(true);
+  React.useEffect(() => {
+    void tradeAlertsEnabled().then(setAlerts);
+  }, []);
   const [liveSwitch, setLiveSwitch] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -50,8 +57,13 @@ export function SettingsScreen() {
     await runtime.setBiometricEnabled(v);
   };
 
+  if (showGuide) {
+    return <GuideScreen onBack={() => setShowGuide(false)} />;
+  }
+
   return (
     <Screen>
+      <Button label="📖 සිංහල උපදෙස් — full guide in Sinhala" onPress={() => setShowGuide(true)} style={{ marginBottom: 12 }} />
       {/* Strategy */}
       <Card>
         <CardTitle right={saved ? <Badge text="SAVED ✓" tone="buy" small /> : undefined}>STRATEGY SETTINGS</CardTitle>
@@ -327,7 +339,27 @@ export function SettingsScreen() {
           await runtime.forgetCredentials();
         }}
       />
-          {/* Engine diagnostics */}
+          {/* Notifications */}
+      <Card>
+        <CardTitle>🔔 NOTIFICATIONS</CardTitle>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.toggleTitle}>Trade alerts</Text>
+            <Text style={styles.toggleHint}>
+              Phone notification the moment the bot buys or sells a coin — works from background scans too.
+            </Text>
+          </View>
+          <Toggle
+            value={alerts}
+            onChange={(v) => {
+              setAlerts(v);
+              void setTradeAlerts(v);
+            }}
+          />
+        </View>
+      </Card>
+
+      {/* Engine diagnostics */}
       <Card>
         <CardTitle right={<Badge text={health.wsConnected ? 'FEED OK' : 'FEED DOWN'} tone={health.wsConnected ? 'buy' : 'sell'} small />}>
           🩺 ENGINE DIAGNOSTICS

@@ -16,6 +16,7 @@ import { LiveProvider, PaperProvider } from './providers';
 import { generateSignal } from './signalEngine';
 import type { Signal } from './types';
 import { simRng, simStep } from './offlineSim';
+import { notifyTrade } from '../services/notify';
 import type { SymbolMarketData, TradingProvider } from './types';
 import {
   DEFAULT_SYMBOLS,
@@ -124,6 +125,7 @@ class AppRuntime {
       logger: this.storeLogger,
       providerFor: () => this.paper ?? this.live!,
       weightsProvider: () => effectiveWeights(this.learner.state.scales),
+      onTradeEvent: (e) => this.fireTradeNotification(e),
     });
     await this.restoreBotState();
 
@@ -199,6 +201,7 @@ class AppRuntime {
         return this.paper ?? this.live!;
       },
       weightsProvider: () => effectiveWeights(this.learner.state.scales),
+      onTradeEvent: (e) => this.fireTradeNotification(e),
     });
 
     await this.restoreBotState();
@@ -434,6 +437,73 @@ class AppRuntime {
       this.stopBotLoop();
       useBotStore.getState().setRunning(false);
       this.syncBotStore();
+    }
+  }
+
+  private fireTradeNotification(e: { kind: 'OPEN' | 'CLOSE'; symbol: string; detail: string }): void {
+    const name = e.symbol.replace('USDT', '');
+    void notifyTrade(e.kind === 'OPEN' ? `🟢 BUY ${name}` : `🔴 SELL ${name}`, e.detail);
+  }
+
+  /* ------------------------- manual trading (one-tap) --------------------- */
+
+  /** Buy now: market order sized `usdt`, fully tracked like bot trades. */
+  async manualBuy(symbol: string, usdt: number): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot) return { ok: false, error: 'not connected' };
+    const conn = useAuthStore.getState();
+    if (!conn.wsConnected && !conn.demoMode) return { ok: false, error: 'offline — live buys need internet' };
+    if (this.bot.positions.some((p) => p.symbol === symbol)) return { ok: false, error: 'position already open' };
+    let data: SymbolMarketData;
+    try {
+      data = await this.snapshot(symbol);
+    } catch (e) {
+      return { ok: false, error: `market data unavailable: ${String(e).slice(0, 60)}` };
+    }
+    const price = data.lastPrice ?? NaN;
+    if (!isFinite(price) || price <= 0) return { ok: false, error: 'no live price yet' };
+    const provider = conn.demoMode ? this.paper : this.live ?? this.paper;
+    if (!provider) return { ok: false, error: 'provider not ready' };
+    let free = 0;
+    try {
+      free = (await provider.getBalances()).usdtFree;
+    } catch (e) {
+      return { ok: false, error: `balance check failed: ${String(e).slice(0, 60)}` };
+    }
+    const size = Math.min(usdt, free);
+    if (size < 10) return { ok: false, error: `insufficient USDT (need ≥ $10, have $${free.toFixed(2)})` };
+    const pseudo: Signal = {
+      symbol,
+      action: 'BUY',
+      score: 40,
+      confidence: 70,
+      factors: [{ name: 'Manual', detail: 'manual order', score: 40 }],
+      timeframes: [],
+      price,
+      computedAt: Date.now(),
+      extras: {} as Signal['extras'],
+    };
+    try {
+      await this.bot.openPosition(symbol, size, pseudo, price, {});
+      this.syncBotStore();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 90) };
+    }
+  }
+
+  /** Sell now: closes the whole position at market. */
+  async manualSell(symbol: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot) return { ok: false, error: 'not connected' };
+    const position = this.bot.positions.find((p) => p.symbol === symbol);
+    if (!position) return { ok: false, error: 'no open position' };
+    const conn = useAuthStore.getState();
+    if (!conn.wsConnected && !conn.demoMode) return { ok: false, error: 'offline — live sells need internet (Binance OCO still guards SL/TP)' };
+    try {
+      await this.bot.closePosition(position, 'MANUAL');
+      this.syncBotStore();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 90) };
     }
   }
 

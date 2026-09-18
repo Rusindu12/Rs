@@ -1,6 +1,19 @@
 import { shouldEnter, TRADE_MODE_FLOOR } from '../src/engine/types';
 import { BinanceRest } from '../src/services/binance/rest';
 
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store: Record<string, string> = {};
+  return {
+    __esModule: true,
+    default: {
+      getItem: async (k: string) => store[k] ?? null,
+      setItem: async (k: string, v: string) => {
+        store[k] = v;
+      },
+    },
+  };
+});
+
 describe('trade-mode entry gate (why-is-it-not-trading fix)', () => {
   it('chill mode requires an action-grade BUY signal', () => {
     expect(shouldEnter(45, 'BUY', 'chill', 'BUY')).toBe(true);
@@ -146,4 +159,68 @@ describe('server-side OCO protection (trading while offline, live mode)', () => 
     expect(binancePrice(150.512345)).toBe('150.512');
     expect(binancePrice(0.1234567)).toBe('0.123457');
   });
+});
+
+describe('manual trading (one-tap buy/sell from Signals)', () => {
+  function makeBot() {
+    const { BotEngine } = require('../src/engine/tradingBot');
+    const events: { kind: string; symbol: string; detail: string }[] = [];
+    const mem = new Map<string, unknown>();
+    const bot = new BotEngine({
+      provider: {
+        mode: 'paper',
+        getBalances: async () => ({ usdtFree: 500, assetFree: { USDT: 500 }, equityUsdt: 500 }),
+        marketBuy: async () => ({ qty: 1, price: 100, feeUsdt: 0.1 }),
+        marketSell: async () => ({ price: 105, proceedsUsdt: 105, feeUsdt: 0.1 }),
+        cancelAllOrders: async () => {},
+      },
+      market: { snapshot: async (sym: string) => ({ symbol: sym, candles: {}, lastPrice: 100 }) },
+      storage: { get: async (k: string) => (mem.get(k) ?? null) as never, set: async (k: string, v: unknown) => void mem.set(k, v) },
+      logger: { log: () => {} },
+      onTradeEvent: (e: { kind: string; symbol: string; detail: string }) => events.push(e),
+    });
+    return { bot, events, mem };
+  }
+
+  const pseudoSignal = () => ({
+    symbol: 'UPUSDT',
+    action: 'BUY',
+    score: 40,
+    confidence: 70,
+    factors: [{ name: 'Manual', detail: 'manual order', score: 40 }],
+    timeframes: [],
+    price: 100,
+    computedAt: Date.now(),
+    extras: {},
+  });
+
+  it('manual buy opens a tracked position and fires a notification event', async () => {
+    const { bot, events } = makeBot();
+    await bot.loadState();
+    await bot.openPosition('UPUSDT', 100, pseudoSignal(), 100, {});
+    expect(bot.positions).toHaveLength(1);
+    expect(bot.positions[0].signalAtEntry).toContain('BUY');
+    expect(events.filter((e: { kind: string }) => e.kind === 'OPEN')).toHaveLength(1);
+  });
+
+  it('manual sell books a MANUAL close and fires the close event', async () => {
+    const { bot, events } = makeBot();
+    await bot.loadState();
+    await bot.openPosition('UPUSDT', 100, pseudoSignal(), 100, {});
+    const rec = await bot.closePosition(bot.positions[0], 'MANUAL');
+    expect(bot.positions).toHaveLength(0);
+    expect(rec.reason).toContain('MANUAL');
+    expect(rec.pnlUsdt).toBeGreaterThan(0);
+    expect(events.filter((e: { kind: string }) => e.kind === 'CLOSE')).toHaveLength(1);
+  });
+
+  it('trade alerts default to ON and persist the off switch', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const { tradeAlertsEnabled, setTradeAlerts } = require('../src/services/notify');
+    expect(await tradeAlertsEnabled()).toBe(true);
+    await setTradeAlerts(false);
+    expect(await tradeAlertsEnabled()).toBe(false);
+    await AsyncStorage.setItem('@aitb/tradeAlerts', '1');
+    expect(await tradeAlertsEnabled()).toBe(true);
+  }, 20_000);
 });

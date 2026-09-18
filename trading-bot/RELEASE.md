@@ -1,5 +1,24 @@
 # Release notes
 
+## v7.0 — Manual trading, trade notifications, Sinhala guide
+
+The "trade it your way" release:
+
+- ✋ **One-tap manual trading** — every card in the ⚡ Signals screen now has a
+  "⚡ Buy now · $100" button (and "✕ Sell now" for held coins). Market execution,
+  fully tracked like bot trades: appears in Activity/Trades/Profile, gets SL/TP,
+  gets the server-side OCO on Binance in live mode.
+- 🔔 **Trade notifications** — the phone buzzes the instant the bot (or you)
+  buys or sells: "🟢 BUY SOL · BUY · qty 0.68 @ 147.10". Works from background
+  scans too. Toggle in Settings → 🔔 Notifications.
+- 📖 **සිංහල උපදෙස්** — a complete in-app guide in Sinhala (Settings entry +
+  a starter hint on the Setup screen): starting out, buy/sell logic, trade
+  modes, offline behaviour, notifications, troubleshooting, risk warning.
+- New tests: manual open/close flows fire notification events; alert prefs
+  persist (102 total).
+
+v7 = manual + automatic + offline + background + bilingual guidance. One app.
+
 ## v6.7 — Trading while the app is closed (Android background bot)
 
 You no longer need the app open (or the internet permanently on) for the bot to work:

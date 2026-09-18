@@ -113,6 +113,8 @@ export class BotEngine {
     providerFor?: (mode: 'paper' | 'live') => TradingProvider;
     /** Live weights (trained × adaptive) resolved fresh on every signal. */
     weightsProvider?: () => EffectiveWeights;
+    /** Fired after every executed trade (open/close) — used for notifications. */
+    onTradeEvent?: (e: { kind: 'OPEN' | 'CLOSE'; symbol: string; detail: string }) => void;
   }) {
     this.provider = deps.provider;
     this.market = deps.market;
@@ -122,9 +124,11 @@ export class BotEngine {
     this.providerFor =
       deps.providerFor ?? ((mode) => (mode === this.provider.mode ? this.provider : this.provider));
     this.weightsProvider = deps.weightsProvider;
+    this.onTradeEvent = deps.onTradeEvent;
   }
 
   private weightsProvider?: () => EffectiveWeights;
+  private onTradeEvent?: (e: { kind: 'OPEN' | 'CLOSE'; symbol: string; detail: string }) => void;
 
   /* ----------------------------- persistence ----------------------------- */
 
@@ -297,7 +301,7 @@ export class BotEngine {
 
   /* ------------------------------ executions ----------------------------- */
 
-  private async openPosition(
+  async openPosition(
     symbol: string,
     sizeUsdt: number,
     signal: Signal,
@@ -351,6 +355,7 @@ export class BotEngine {
     this.trades.push(record);
     await Promise.all([this.persistPositions(), this.persistTrades()]);
     this.logger.log('trade', `OPEN ${symbol} qty ${qty} @ ${entry} — ${record.reason}`);
+    this.onTradeEvent?.({ kind: 'OPEN', symbol, detail: `${signal.action} · qty ${qty} @ ${entry}` });
 
     // Server-side protection: a real OCO on Binance guards this position even
     // when the app is offline / the phone is dead — Binance sells at SL or TP.
@@ -414,6 +419,7 @@ export class BotEngine {
       'trade',
       `CLOSE ${position.symbol} @ ${exit} — ${reason} — PnL ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT`
     );
+    this.onTradeEvent?.({ kind: 'CLOSE', symbol: position.symbol, detail: `${reason} · PnL ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT` });
     return record ?? {
       id: position.id,
       symbol: position.symbol,

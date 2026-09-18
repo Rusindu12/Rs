@@ -1,17 +1,20 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { Badge, Button, Card, Chip, EmptyState, Screen, actionTone } from '../components/ui';
+import { Badge, Button, Card, Chip, ConfirmModal, EmptyState, Screen, actionTone } from '../components/ui';
 import { colors } from '../theme';
 import { runtime } from '../engine/runtime';
 import { useBotStore } from '../store/botStore';
-import { fmtPrice } from '../utils/format';
+import { fmtPrice, fmtUsd } from '../utils/format';
+import type { Position } from '../engine/types';
 import type { Signal } from '../engine/types';
 
 export function SignalsScreen() {
   const signals = useBotStore((s) => s.signals);
+  const positions = useBotStore((s) => s.positions);
   const ticking = useBotStore((s) => s.ticking);
   const lastTickAt = useBotStore((s) => s.lastTickAt);
   const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -49,14 +52,42 @@ export function SignalsScreen() {
       </View>
 
       {sorted.map((s) => (
-        <SignalCard key={s.symbol} signal={s} />
+        <SignalCard
+          key={s.symbol}
+          signal={s}
+          position={positions.find((p) => p.symbol === s.symbol)}
+          busy={busy === s.symbol}
+          disabled={busy !== null}
+          onTrade={async (kind) => {
+            setBusy(s.symbol);
+            const r = kind === 'buy' ? await runtime.manualBuy(s.symbol, tradeAmount) : await runtime.manualSell(s.symbol);
+            setBusy(null);
+            if (!r.ok) console.log('manual trade failed:', r.error);
+          }}
+        />
       ))}
     </Screen>
   );
 }
 
-function SignalCard({ signal }: { signal: Signal }) {
+/** Trade size for one-tap buys (uses the bot's configured amount, min $10). */
+const tradeAmount = Math.max(10, Math.round(useBotStore.getState().config.tradeAmountUsdt));
+
+function SignalCard({
+  signal,
+  position,
+  busy,
+  disabled,
+  onTrade,
+}: {
+  signal: Signal;
+  position?: Position;
+  busy?: boolean;
+  disabled?: boolean;
+  onTrade: (kind: 'buy' | 'sell') => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState<'buy' | 'sell' | null>(null);
   const tone = actionTone(signal.action);
   const stripe = tone === 'buy' ? colors.green : tone === 'sell' ? colors.red : colors.gold;
   const ex = signal.extras;
@@ -81,6 +112,42 @@ function SignalCard({ signal }: { signal: Signal }) {
         <View style={styles.meterTrack}>
           <View style={[styles.meterFill, { width: `${Math.min(100, signal.confidence)}%`, backgroundColor: stripe }]} />
         </View>
+        <View style={styles.quickRow}>
+          {position ? (
+            <Button
+              label={busy ? 'Selling…' : '✕ Sell now'}
+              tone="danger"
+              disabled={disabled}
+              onPress={() => setConfirm('sell')}
+              style={styles.quickBtn}
+            />
+          ) : (
+            <Button
+              label={busy ? 'Buying…' : `⚡ Buy now · ${fmtUsd(tradeAmount)}`}
+              tone="success"
+              disabled={disabled}
+              onPress={() => setConfirm('buy')}
+              style={styles.quickBtn}
+            />
+          )}
+        </View>
+        <ConfirmModal
+          visible={confirm !== null}
+          title={confirm === 'sell' ? `Sell ${signal.symbol.replace('USDT', '')} now?` : `Buy ${signal.symbol.replace('USDT', '')} now?`}
+          message={
+            confirm === 'sell'
+              ? 'Closes the whole position at market price. PnL is booked instantly.'
+              : `Market buy worth ${fmtUsd(tradeAmount)} at ~${fmtPrice(signal.price)}. The bot then manages SL/TP for you.`
+          }
+          confirmLabel={confirm === 'sell' ? 'Sell' : 'Buy'}
+          danger={confirm === 'sell'}
+          onConfirm={() => {
+            const kind = confirm;
+            setConfirm(null);
+            if (kind) onTrade(kind);
+          }}
+          onCancel={() => setConfirm(null)}
+        />
         <View style={styles.confRow}>
           <Text style={styles.confText}>confidence {signal.confidence}%</Text>
           <Text style={styles.confText}>
@@ -152,6 +219,8 @@ function SignalCard({ signal }: { signal: Signal }) {
 }
 
 const styles = StyleSheet.create({
+  quickRow: { marginTop: 10 },
+  quickBtn: { width: '100%' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   headerText: { color: colors.textDim, fontSize: 11.5, flex: 1, marginRight: 8 },
   refreshBtn: { paddingHorizontal: 18, paddingVertical: 8 },

@@ -144,6 +144,7 @@ export function SetupScreen() {
 }
 
 const styles = StyleSheet.create({
+  siHint: { color: colors.textDim, fontSize: 11, lineHeight: 17, textAlign: 'center', marginBottom: 8 },
   hero: { alignItems: 'center', marginVertical: 22 },
   logo: { fontSize: 46 },
   title: { color: colors.text, fontSize: 24, fontWeight: '900', marginTop: 8 },
