@@ -186,6 +186,27 @@ export class BinanceRest {
   async openOrders(): Promise<OpenOrder[]> {
     return this.signed<OpenOrder[]>('/api/v3/openOrders');
   }
+
+  /**
+   * Server-side OCO (one-cancels-other) protection: a SELL take-profit limit
+   * leg + a stop-loss stop-limit leg. The order lives on Binance's servers —
+   * it executes even when this app is offline. Returns the orderListId.
+   */
+  async placeOco(symbol: string, quantity: number, takeProfitPrice: number, stopPrice: number): Promise<string | null> {
+    const params = ocoParams(symbol, quantity, takeProfitPrice, stopPrice);
+    const resp = await this.signed<{ orderListId?: number }>('/api/v3/order/oco', params, 'POST');
+    return resp?.orderListId != null ? String(resp.orderListId) : null;
+  }
+
+  async cancelOco(symbol: string, orderListId: string): Promise<void> {
+    await this.signed('/api/v3/orderList', { symbol, orderListId }, 'DELETE');
+  }
+
+  /** Current price for one symbol (24h ticker last price). */
+  async lastPrice(symbol: string): Promise<number> {
+    const rows = await this.tickers24h([symbol]);
+    return Number(rows[0]?.lastPrice ?? 0);
+  }
 }
 
 /* ------------------------------- helpers -------------------------------- */
@@ -193,6 +214,30 @@ export class BinanceRest {
 function trimQty(qty: number): string {
   // Binance rejects quantities with more than 8 decimals.
   return qty.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Price rounding that fits Binance tick sizes across typical pairs. */
+export function binancePrice(p: number): string {
+  const decimals = p >= 1000 ? 2 : p >= 100 ? 3 : p >= 1 ? 4 : p >= 0.01 ? 6 : 8;
+  return p.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Pure builder for the OCO request — unit-tested. */
+export function ocoParams(
+  symbol: string,
+  quantity: number,
+  takeProfitPrice: number,
+  stopPrice: number
+): Record<string, string> {
+  return {
+    symbol,
+    side: 'SELL',
+    quantity: trimQty(quantity),
+    price: binancePrice(takeProfitPrice), // take-profit limit leg
+    stopPrice: binancePrice(stopPrice), // stop-loss trigger
+    stopLimitPrice: binancePrice(stopPrice * 0.995), // 0.5% below trigger so the limit fills in fast moves
+    stopLimitTimeInForce: 'GTC',
+  };
 }
 
 async function safeMessage(res: Response): Promise<string> {
@@ -270,6 +315,7 @@ export interface OpenOrder {
   type: string;
   price: string;
   origQty: string;
+  orderListId?: number;
 }
 
 interface OrderResponse {

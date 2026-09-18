@@ -127,6 +127,17 @@ export function SettingsScreen() {
         </View>
         <View style={styles.toggleRow}>
           <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.toggleTitle}>Binance server-side SL/TP (offline protection)</Text>
+            <Text style={styles.toggleHint}>
+              Places a real OCO order on Binance for every live position. Your stop-loss / take-profit
+              execute on Binance's own servers — protection continues even when the app is closed,
+              the phone is off, or the internet is down. Strongly recommended.
+            </Text>
+          </View>
+          <Toggle value={config.serverSideStops ?? true} onChange={(v) => setConfig({ serverSideStops: v })} />
+        </View>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.toggleTitle}>Confidence-based sizing</Text>
             <Text style={styles.toggleHint}>
               Scales each position between 0.75×–1× of your trade size by AI confidence (100% = full size).

@@ -63,6 +63,7 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   minSignal: BOT_DEFAULTS.minSignal,
   tradeMode: 'normal',
   maxHoldHours: 8,
+  serverSideStops: true,
   pollIntervalMs: BOT_DEFAULTS.pollIntervalMs,
   useAtrStops: true,
   confidenceSizing: true,
@@ -140,6 +141,29 @@ export class BotEngine {
 
   async persistConfig(): Promise<void> {
     await this.storage.set(STORAGE_KEYS.botConfig, this.config);
+  }
+
+  /**
+   * Live mode: if a server-side OCO is no longer on Binance's books, it already
+   * executed while we were away — close the local position to match reality.
+   */
+  async reconcileServerExits(): Promise<void> {
+    if (this.provider.mode !== 'live' || !this.positions.length) return;
+    if (!this.provider.openOrdersExt) return;
+    let open: { orderListId?: number }[] = [];
+    try {
+      open = await this.provider.openOrdersExt();
+    } catch (e) {
+      this.logger.log('warn', `reconcile: could not list open orders (${String(e)})`);
+      return;
+    }
+    const lists = new Set(open.map((o) => String(o.orderListId)));
+    for (const p of [...this.positions]) {
+      if (!p.serverOcoId) continue;
+      if (lists.has(p.serverOcoId)) continue; // still protected / waiting
+      this.logger.log('info', `${p.symbol}: server-side SL/TP executed while away — syncing position`);
+      await this.closePosition(p, 'SERVER_SIDE_EXIT', { filledRemotely: true });
+    }
   }
 
   private async persistPositions(): Promise<void> {
@@ -327,11 +351,47 @@ export class BotEngine {
     this.trades.push(record);
     await Promise.all([this.persistPositions(), this.persistTrades()]);
     this.logger.log('trade', `OPEN ${symbol} qty ${qty} @ ${entry} — ${record.reason}`);
+
+    // Server-side protection: a real OCO on Binance guards this position even
+    // when the app is offline / the phone is dead — Binance sells at SL or TP.
+    if (this.config.serverSideStops && this.provider.mode === 'live' && this.provider.placeProtectiveOco) {
+      try {
+        const ocoId = await this.provider.placeProtectiveOco(position);
+        if (ocoId) {
+          position.serverOcoId = ocoId;
+          await this.persistPositions();
+          this.logger.log('info', `server-side SL/TP placed on Binance (OCO ${ocoId}) — protects ${symbol} even when offline`);
+        }
+      } catch (e) {
+        this.logger.log('warn', `server-side OCO failed (guarded in-app only): ${String(e)}`);
+      }
+    }
     return record;
   }
 
-  async closePosition(position: Position, reason: string): Promise<TradeRecord> {
-    const { price, proceedsUsdt, feeUsdt } = await this.provider.marketSell(position.symbol, position.qty);
+  async closePosition(position: Position, reason: string, opts?: { filledRemotely?: boolean }): Promise<TradeRecord> {
+    let price = 0;
+    let proceedsUsdt = 0;
+    let feeUsdt = 0;
+    if (opts?.filledRemotely) {
+      // The server-side OCO already executed on Binance (we were offline).
+      // Sell is not possible again — book at the current market price.
+      price = this.provider.lastPrice ? await this.provider.lastPrice(position.symbol) : 0;
+      proceedsUsdt = price * position.qty;
+      feeUsdt = proceedsUsdt * 0.001;
+    } else {
+      if (position.serverOcoId && this.provider.cancelProtectiveOco) {
+        try {
+          await this.provider.cancelProtectiveOco(position.symbol, position.serverOcoId);
+        } catch {
+          /* order list may already be filled or gone — proceed with the sell */
+        }
+      }
+      const fill = await this.provider.marketSell(position.symbol, position.qty);
+      price = fill.price;
+      proceedsUsdt = fill.proceedsUsdt;
+      feeUsdt = fill.feeUsdt;
+    }
     const idx = this.positions.indexOf(position);
     if (idx >= 0) this.positions.splice(idx, 1);
 

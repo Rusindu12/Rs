@@ -127,3 +127,23 @@ describe('offline price simulator (demo trading without internet)', () => {
     expect(moved).toBeGreaterThan(40);
   });
 });
+
+describe('server-side OCO protection (trading while offline, live mode)', () => {
+  it('builds a valid Binance OCO request: SELL with TP limit + SL stop-limit legs', () => {
+    const { ocoParams } = require('../src/services/binance/rest');
+    const p = ocoParams('SOLUSDT', 0.0521, 150.5, 144.2);
+    expect(p.side).toBe('SELL');
+    expect(p.symbol).toBe('SOLUSDT');
+    expect(Number(p.price)).toBeCloseTo(150.5, 2);
+    expect(Number(p.stopPrice)).toBeCloseTo(144.2, 2);
+    expect(Number(p.stopLimitPrice)).toBeLessThan(Number(p.stopPrice)); // limit fills in fast drops
+    expect(p.stopLimitTimeInForce).toBe('GTC');
+  });
+
+  it('rounds prices to Binance-friendly precision across magnitudes', () => {
+    const { binancePrice } = require('../src/services/binance/rest');
+    expect(binancePrice(65000.123456)).toBe('65000.12');
+    expect(binancePrice(150.512345)).toBe('150.512');
+    expect(binancePrice(0.1234567)).toBe('0.123457');
+  });
+});

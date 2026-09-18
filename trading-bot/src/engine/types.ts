@@ -95,6 +95,8 @@ export interface Position {
   tradeAmountUsdt: number;
   mode: 'paper' | 'live';
   signalAtEntry: string;
+  /** Binance server-side OCO (SL/TP) protecting this position while offline. */
+  serverOcoId?: string;
 }
 
 export interface TradeRecord {
@@ -130,6 +132,8 @@ export interface BotConfig {
   tradeMode: TradeMode;
   /** Time stop: close any position after this many hours (0 = hold until TP/SL). */
   maxHoldHours: number;
+  /** Live mode: place a real OCO on Binance so SL/TP execute even when offline. */
+  serverSideStops: boolean;
   /** Widen SL/TP with ATR volatility so volatile coins aren't clipped. */
   useAtrStops: boolean;
   /** Scale position size between 0.75×–1× by signal confidence. */
@@ -151,6 +155,12 @@ export interface TradingProvider {
   /** Market sell `qty` of the base asset; returns proceeds + fee. */
   marketSell(symbol: string, qty: number): Promise<{ price: number; proceedsUsdt: number; feeUsdt: number }>;
   cancelAllOrders(symbol: string): Promise<void>;
+  /** Optional: server-side OCO protection (live providers only). */
+  placeProtectiveOco?(p: { symbol: string; qty: number; stopLoss: number; takeProfit: number }): Promise<string | null>;
+  cancelProtectiveOco?(symbol: string, orderListId: string): Promise<void>;
+  lastPrice?(symbol: string): Promise<number>;
+  /** Optional: full open-order list with OCO ids (live providers only). */
+  openOrdersExt?(): Promise<{ orderListId?: number }[]>;
 }
 
 export const ACTION_SCORE: Record<SignalStrength, number> = {

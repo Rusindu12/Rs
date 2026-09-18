@@ -89,6 +89,7 @@ class AppRuntime {
     if (creds) {
       try {
         await this.wireCredentials(creds);
+        void this.bot?.reconcileServerExits().catch(() => undefined);
       } catch (e) {
         this.storeLogger.log('error', `credential wiring failed: ${String(e)}`);
       }
@@ -256,6 +257,9 @@ class AppRuntime {
         this.storeLogger.log('info', 'connection restored — real prices resumed');
       }
       this.stopOfflineSim(true);
+      if (!st.demoMode && this.bot) {
+        void this.bot.reconcileServerExits().catch(() => undefined);
+      }
       void this.runTick(); // catch up immediately
     }
   }

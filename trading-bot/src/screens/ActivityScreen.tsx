@@ -66,6 +66,7 @@ const REASON_LABEL: Record<string, string> = {
   MAX_HOLD: '⏱ max hold time reached',
   EMERGENCY_STOP: '🚨 emergency stop',
   MANUAL: '✋ closed manually',
+  SERVER_SIDE_EXIT: '🛰️ sold by Binance while offline',
 };
 
 function timeAgo(ts: number): string {

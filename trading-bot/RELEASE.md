@@ -1,5 +1,23 @@
 # Release notes
 
+## v6.6 — Real trading while offline: Binance server-side SL/TP (OCO)
+
+The honest physics: an app cannot SEND orders to Binance without internet — no app can.
+What CAN trade while you are offline is Binance itself. So now:
+
+- **Every live position gets a real OCO order on Binance** (take-profit limit leg +
+  stop-loss stop-limit leg). The order lives on Binance's servers — it executes even
+  when the app is closed, the phone is off, or the internet is down for hours.
+- **Automatic reconciliation**: on app start and on every reconnect the bot checks the
+  server — if an OCO already fired while away, the local position is closed and booked
+  as 🛰️ "sold by Binance while offline" in the Activity feed.
+- **Clean un-winding**: before any app-driven sell, the OCO is cancelled first so the
+  funds are free; if it already filled, the local position syncs instead of re-selling.
+- Settings → Bot → "Binance server-side SL/TP (offline protection)" (default ON).
+- New unit tests cover the OCO request builder and Binance price rounding (99 total).
+
+Demo/paper mode keeps its offline simulated-price trading from v6.5.
+
 ## v6.5 — Offline resilience: demo trading keeps running without internet
 
 - **Demo mode works fully offline** — when the connection drops, paper trading

@@ -105,4 +105,20 @@ export class LiveProvider implements TradingProvider {
   async cancelAllOrders(symbol: string): Promise<void> {
     await this.rest.cancelAllOrders(symbol);
   }
+
+  async placeProtectiveOco(p: { symbol: string; qty: number; stopLoss: number; takeProfit: number }): Promise<string | null> {
+    return this.rest.placeOco(p.symbol, p.qty, p.takeProfit, p.stopLoss);
+  }
+
+  async cancelProtectiveOco(symbol: string, orderListId: string): Promise<void> {
+    await this.rest.cancelOco(symbol, orderListId);
+  }
+
+  async lastPrice(symbol: string): Promise<number> {
+    return this.rest.lastPrice(symbol);
+  }
+
+  async openOrdersExt(): Promise<{ orderListId?: number }[]> {
+    return this.rest.openOrders();
+  }
 }

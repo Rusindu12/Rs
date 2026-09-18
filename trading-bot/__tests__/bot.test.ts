@@ -65,6 +65,7 @@ const baseConfig = (): BotConfig => ({
   minSignal: 'BUY',
   tradeMode: 'chill',
   maxHoldHours: 8,
+  serverSideStops: true,
   pollIntervalMs: 30_000,
   useAtrStops: true,
   confidenceSizing: true,
