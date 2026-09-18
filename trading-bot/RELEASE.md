@@ -34,3 +34,6 @@
 ## v6.2.1
 
 - Profile tab polish release (marker commit for CI publish).
+
+- CI: publish decision now scans the last 6 commit subjects, so merges between
+  the marker commit and the build no longer skip publishing.

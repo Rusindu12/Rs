@@ -168,10 +168,12 @@ jobs:
           event="${{ github.event_name }}"
           ref="${{ github.ref }}"
           subject="$(git log -1 --pretty=%s)"
+          recent="$(git log -6 --pretty=%s)"
           pub_in="${{ github.event.inputs.publish_release }}"
           publish=false
           if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then publish=true; fi
           case "$subject" in *"[publish-apk]"*) publish=true ;; esac
+          case "$recent" in *"[publish-apk]"*) publish=true ;; esac
           if [ "$event" = "workflow_dispatch" ] && [ "$pub_in" = "true" ]; then publish=true; fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "publish=$publish (event=$event, subject: $subject)"
@@ -318,10 +320,12 @@ jobs:
           event="${{ github.event_name }}"
           ref="${{ github.ref }}"
           subject="$(git log -1 --pretty=%s)"
+          recent="$(git log -6 --pretty=%s)"
           pub_in="${{ github.event.inputs.publish_release }}"
           publish=false
           if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then publish=true; fi
           case "$subject" in *"[publish-apk]"*) publish=true ;; esac
+          case "$recent" in *"[publish-apk]"*) publish=true ;; esac
           if [ "$event" = "workflow_dispatch" ] && [ "$pub_in" = "true" ]; then publish=true; fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
