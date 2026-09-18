@@ -1,0 +1,296 @@
+import { shouldEnter, TRADE_MODE_FLOOR } from '../src/engine/types';
+import { BinanceRest } from '../src/services/binance/rest';
+
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store: Record<string, string> = {};
+  return {
+    __esModule: true,
+    default: {
+      getItem: async (k: string) => store[k] ?? null,
+      setItem: async (k: string, v: string) => {
+        store[k] = v;
+      },
+    },
+  };
+});
+
+describe('trade-mode entry gate (why-is-it-not-trading fix)', () => {
+  it('chill mode requires an action-grade BUY signal', () => {
+    expect(shouldEnter(45, 'BUY', 'chill', 'BUY')).toBe(true);
+    expect(shouldEnter(25, 'HOLD', 'chill', 'BUY')).toBe(false);
+    expect(shouldEnter(75, 'STRONG_BUY', 'chill', 'STRONG_BUY')).toBe(true);
+    expect(shouldEnter(45, 'BUY', 'chill', 'STRONG_BUY')).toBe(false);
+  });
+
+  it('normal mode opens from score ≥ 20 even on bullish HOLD', () => {
+    expect(shouldEnter(20, 'HOLD', 'normal', 'BUY')).toBe(true);
+    expect(shouldEnter(19.9, 'HOLD', 'normal', 'BUY')).toBe(false);
+    expect(shouldEnter(35, 'BUY', 'normal', 'BUY')).toBe(true);
+  });
+
+  it('turbo mode opens from score ≥ 8', () => {
+    expect(shouldEnter(8, 'HOLD', 'turbo', 'BUY')).toBe(true);
+    expect(shouldEnter(7.9, 'HOLD', 'turbo', 'BUY')).toBe(false);
+  });
+
+  it('never enters on sell-side signals in any mode', () => {
+    expect(shouldEnter(-50, 'SELL', 'turbo', 'BUY')).toBe(false);
+    expect(shouldEnter(-70, 'STRONG_SELL', 'normal', 'BUY')).toBe(false);
+  });
+
+  it('floors are ordered chill > normal > turbo', () => {
+    expect(TRADE_MODE_FLOOR.chill).toBeGreaterThan(TRADE_MODE_FLOOR.normal);
+    expect(TRADE_MODE_FLOOR.normal).toBeGreaterThan(TRADE_MODE_FLOOR.turbo);
+  });
+});
+
+describe('Binance REST host failover', () => {
+  const realFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+  afterEach(() => {
+    (globalThis as { fetch?: typeof fetch }).fetch = realFetch;
+  });
+
+  it('falls back to the mirror host when api.binance.com is unreachable', async () => {
+    const rest = new BinanceRest('', '', 'live');
+    const calls: string[] = [];
+    (globalThis as { fetch?: typeof fetch }).fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith('https://api.binance.com')) throw new TypeError('Network request failed');
+      return {
+        ok: true,
+        json: async () => [
+          [1700000000000, '1', '2', '0.5', '1.5', '10', 1700000899999, '15', 3, '0', '0', '0'],
+        ],
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    const rows = await rest.klines('BTCUSDT', '15m', 1);
+    expect(rows).toHaveLength(1);
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls[0]).toContain('api.binance.com');
+    expect(rest.activePublicBase).not.toBe('https://api.binance.com');
+    // second call goes straight to the remembered host
+    calls.length = 0;
+    await rest.klines('ETHUSDT', '15m', 1);
+    expect(calls[0]).not.toContain('api.binance.com');
+  }, 20_000);
+});
+
+describe('exit paths — every BUY is eventually SOLD', () => {
+  const pos = { stopLoss: 98, takeProfit: 104, openedAt: 0 } as any;
+
+  it('closes early when the AI flips bearish (score ≤ −20)', () => {
+    const { checkExit } = require('../src/engine/riskManager');
+    expect(checkExit(pos, 100, 'HOLD', { score: -20 }).reason).toBe('SIGNAL_FLIP');
+    expect(checkExit(pos, 100, 'HOLD', { score: -19.9 }).exit).toBe(false);
+    expect(checkExit(pos, 100, 'HOLD', { score: 5 }).exit).toBe(false);
+  });
+
+  it('time-stops positions held beyond maxHold', () => {
+    const { checkExit } = require('../src/engine/riskManager');
+    const h8 = 8 * 3_600_000;
+    expect(checkExit(pos, 100, 'HOLD', { heldMs: h8, maxHoldMs: h8 }).reason).toBe('MAX_HOLD');
+    expect(checkExit(pos, 100, 'HOLD', { heldMs: h8 - 1, maxHoldMs: h8 }).exit).toBe(false);
+    expect(checkExit(pos, 100, 'HOLD', { heldMs: h8, maxHoldMs: 0 }).exit).toBe(false); // 0 = disabled
+  });
+
+  it('keeps SL/TP as the first-priority exits', () => {
+    const { checkExit } = require('../src/engine/riskManager');
+    expect(checkExit(pos, 97, 'HOLD', { score: -50 }).reason).toBe('STOP_LOSS');
+    expect(checkExit(pos, 105, 'HOLD', { score: -50 }).reason).toBe('TAKE_PROFIT');
+  });
+});
+
+describe('offline price simulator (demo trading without internet)', () => {
+  it('keeps prices within ±12% of the last real price', () => {
+    const { simStep, SIM_BAND } = require('../src/engine/offlineSim');
+    const rand = require('../src/engine/offlineSim').simRng('BTCUSDT');
+    const anchor = 100;
+    let p = anchor;
+    for (let i = 0; i < 5000; i++) {
+      p = simStep(p, rand, anchor);
+      expect(p).toBeGreaterThanOrEqual(anchor * (1 - SIM_BAND) - 1e-9);
+      expect(p).toBeLessThanOrEqual(anchor * (1 + SIM_BAND) + 1e-9);
+    }
+  });
+
+  it('is deterministic per symbol and mean-reverts toward the anchor', () => {
+    const { simStep, simRng } = require('../src/engine/offlineSim');
+    const r1 = simRng('SOLUSDT');
+    const r2 = simRng('SOLUSDT');
+    let a = 100, b = 100;
+    for (let i = 0; i < 100; i++) {
+      a = simStep(a, r1, 100);
+      b = simStep(b, r2, 100);
+    }
+    expect(a).toBeCloseTo(b, 10);
+  });
+
+  it('moves prices (not a flat line) so offline paper trading still triggers signals', () => {
+    const { simStep, simRng } = require('../src/engine/offlineSim');
+    const rand = simRng('ETHUSDT');
+    let p = 2000;
+    let moved = 0;
+    for (let i = 0; i < 50; i++) {
+      const prev = p;
+      p = simStep(p, rand, 2000);
+      if (p !== prev) moved++;
+    }
+    expect(moved).toBeGreaterThan(40);
+  });
+});
+
+describe('server-side OCO protection (trading while offline, live mode)', () => {
+  it('builds a valid Binance OCO request: SELL with TP limit + SL stop-limit legs', () => {
+    const { ocoParams } = require('../src/services/binance/rest');
+    const p = ocoParams('SOLUSDT', 0.0521, 150.5, 144.2);
+    expect(p.side).toBe('SELL');
+    expect(p.symbol).toBe('SOLUSDT');
+    expect(Number(p.price)).toBeCloseTo(150.5, 2);
+    expect(Number(p.stopPrice)).toBeCloseTo(144.2, 2);
+    expect(Number(p.stopLimitPrice)).toBeLessThan(Number(p.stopPrice)); // limit fills in fast drops
+    expect(p.stopLimitTimeInForce).toBe('GTC');
+  });
+
+  it('rounds prices to Binance-friendly precision across magnitudes', () => {
+    const { binancePrice } = require('../src/services/binance/rest');
+    expect(binancePrice(65000.123456)).toBe('65000.12');
+    expect(binancePrice(150.512345)).toBe('150.512');
+    expect(binancePrice(0.1234567)).toBe('0.123457');
+  });
+});
+
+describe('manual trading (one-tap buy/sell from Signals)', () => {
+  function makeBot() {
+    const { BotEngine } = require('../src/engine/tradingBot');
+    const events: { kind: string; symbol: string; detail: string }[] = [];
+    const mem = new Map<string, unknown>();
+    const bot = new BotEngine({
+      provider: {
+        mode: 'paper',
+        getBalances: async () => ({ usdtFree: 500, assetFree: { USDT: 500 }, equityUsdt: 500 }),
+        marketBuy: async () => ({ qty: 1, price: 100, feeUsdt: 0.1 }),
+        marketSell: async () => ({ price: 105, proceedsUsdt: 105, feeUsdt: 0.1 }),
+        cancelAllOrders: async () => {},
+      },
+      market: { snapshot: async (sym: string) => ({ symbol: sym, candles: {}, lastPrice: 100 }) },
+      storage: { get: async (k: string) => (mem.get(k) ?? null) as never, set: async (k: string, v: unknown) => void mem.set(k, v) },
+      logger: { log: () => {} },
+      onTradeEvent: (e: { kind: string; symbol: string; detail: string }) => events.push(e),
+    });
+    return { bot, events, mem };
+  }
+
+  const pseudoSignal = () => ({
+    symbol: 'UPUSDT',
+    action: 'BUY',
+    score: 40,
+    confidence: 70,
+    factors: [{ name: 'Manual', detail: 'manual order', score: 40 }],
+    timeframes: [],
+    price: 100,
+    computedAt: Date.now(),
+    extras: {},
+  });
+
+  it('manual buy opens a tracked position and fires a notification event', async () => {
+    const { bot, events } = makeBot();
+    await bot.loadState();
+    await bot.openPosition('UPUSDT', 100, pseudoSignal(), 100, {});
+    expect(bot.positions).toHaveLength(1);
+    expect(bot.positions[0].signalAtEntry).toContain('BUY');
+    expect(events.filter((e: { kind: string }) => e.kind === 'OPEN')).toHaveLength(1);
+  });
+
+  it('manual sell books a MANUAL close and fires the close event', async () => {
+    const { bot, events } = makeBot();
+    await bot.loadState();
+    await bot.openPosition('UPUSDT', 100, pseudoSignal(), 100, {});
+    const rec = await bot.closePosition(bot.positions[0], 'MANUAL');
+    expect(bot.positions).toHaveLength(0);
+    expect(rec.reason).toContain('MANUAL');
+    expect(rec.pnlUsdt).toBeGreaterThan(0);
+    expect(events.filter((e: { kind: string }) => e.kind === 'CLOSE')).toHaveLength(1);
+  });
+
+  it('trade alerts default to ON and persist the off switch', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const { tradeAlertsEnabled, setTradeAlerts } = require('../src/services/notify');
+    expect(await tradeAlertsEnabled()).toBe(true);
+    await setTradeAlerts(false);
+    expect(await tradeAlertsEnabled()).toBe(false);
+    await AsyncStorage.setItem('@aitb/tradeAlerts', '1');
+    expect(await tradeAlertsEnabled()).toBe(true);
+  }, 20_000);
+});
+
+describe('tick resilience — one bad symbol never stops the others (web log bug)', () => {
+  function makeBotWithFailingSell() {
+    const { BotEngine } = require('../src/engine/tradingBot');
+    let sellCalls = 0;
+    const bot = new BotEngine({
+      provider: {
+        mode: 'paper',
+        getBalances: async () => ({ usdtFree: 500, assetFree: { USDT: 500 }, equityUsdt: 500 }),
+        marketBuy: async () => ({ qty: 1, price: 100, feeUsdt: 0.1 }),
+        marketSell: async () => {
+          sellCalls++;
+          throw new Error('paper: insufficient BTC balance'); // simulates drifted ledger
+        },
+        cancelAllOrders: async () => {},
+      },
+      market: {
+        snapshot: async (sym: string) => ({
+          symbol: sym,
+          candles: {
+            // 80 flat-ish bars so generateSignal has something to chew
+            '15m': Array.from({ length: 80 }, (_, i) => ({
+              time: 1700000000000 + i * 900000,
+              open: 100, high: 101, low: 99, close: 100 + (i % 3), volume: 10,
+              closeTime: 1700000000000 + i * 900000 + 899999,
+            })),
+          },
+          lastPrice: sym === 'BADUSDT' ? 100 : 200,
+        }),
+      },
+      storage: {
+        get: async (k: string) => ((k === '@aitb/bot.positions.v1' ? [
+          {
+            id: 'p1', symbol: 'BADUSDT', side: 'LONG', qty: 1, entryPrice: 90,
+            openedAt: Date.now() - 9 * 3_600_000, stopLoss: 1000, takeProfit: 0.1,
+            tradeAmountUsdt: 100, mode: 'paper', signalAtEntry: 'test',
+          },
+        ] : k === '@aitb/bot.config.v1' ? { symbols: ['BADUSDT', 'GOODUSDT'] } : null)) as never,
+        set: async () => {},
+      },
+      logger: { log: () => {} },
+    });
+    return { bot, getSellCalls: () => sellCalls };
+  }
+
+  it('a failed exit is deferred and the OTHER symbols still get scanned+traded', async () => {
+    const { bot, getSellCalls } = makeBotWithFailingSell();
+    await bot.loadState();
+    const result = await bot.tick();
+    expect(result.signals.map((s: { symbol: string }) => s.symbol)).toContain('GOODUSDT'); // scan survived
+    expect(getSellCalls()).toBe(1); // exit attempted (deferred after the throw)
+    expect(bot.positions.some((p: { symbol: string }) => p.symbol === 'BADUSDT')).toBe(true); // position kept for retry
+  });
+
+  it('paper sell clamps to the held balance instead of throwing (ledger drift)', async () => {
+    const { PaperProvider } = require('../src/engine/providers');
+    const paper = new PaperProvider(1000, () => 100, { usdtFree: 1000, assetFree: { BTC: 0.01 } });
+    const r = await paper.marketSell('BTCUSDT', 0.5); // far more than held
+    expect(r.proceedsUsdt).toBeCloseTo(0.01 * 100 * 0.999, 6);
+    expect((await paper.getBalances()).assetFree.BTC).toBeCloseTo(0, 8);
+  });
+
+  it('paper sell with zero held still closes (zero proceeds, current price)', async () => {
+    const { PaperProvider } = require('../src/engine/providers');
+    const paper = new PaperProvider(1000, () => 100);
+    const r = await paper.marketSell('BTCUSDT', 0.5);
+    expect(r.proceedsUsdt).toBe(0);
+    expect(r.price).toBe(100);
+  });
+});
