@@ -1,5 +1,25 @@
 # Release notes
 
+## v6.7 — Trading while the app is closed (Android background bot)
+
+You no longer need the app open (or the internet permanently on) for the bot to work:
+
+- **Background trading tick (Android)** — a WorkManager job wakes the bot every
+  ~15 minutes even when the app is swiped away or the phone rebooted
+  (start-on-boot). The engine keeps scanning and opening trades while you are away.
+- **Exits are absolute** — every live position's SL/TP lives on Binance's servers
+  (OCO, v6.6) and executes 24/7 regardless of app, phone or internet state.
+- **Reconnect catch-up summary** — coming back online logs how many positions were
+  guarded on Binance while away and instantly reconciles any that sold server-side
+  (shown in the Activity feed as "sold by Binance while offline").
+- **Dashboard protection line** — live mode shows "🛡 n/m position(s) protected on
+  Binance's servers" right under the controls.
+
+Reality check (unchanged): NEW buys need internet + the background job cadence is
+Android-controlled (≥15 min). Guaranteed-24/7 exits + periodic background scanning +
+offline demo trading cover the "I am often offline" case as tightly as mobile
+platforms physically allow.
+
 ## v6.6 — Real trading while offline: Binance server-side SL/TP (OCO)
 
 The honest physics: an app cannot SEND orders to Binance without internet — no app can.

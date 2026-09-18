@@ -258,6 +258,12 @@ class AppRuntime {
       }
       this.stopOfflineSim(true);
       if (!st.demoMode && this.bot) {
+        const open = this.bot.positions.length;
+        const guarded = this.bot.positions.filter((p) => p.serverOcoId).length;
+        this.storeLogger.log(
+          'info',
+          `back online — ${open} position(s) open, ${guarded} guarded by Binance OCO while away — reconciling…`
+        );
         void this.bot.reconcileServerExits().catch(() => undefined);
       }
       void this.runTick(); // catch up immediately
@@ -295,6 +301,11 @@ class AppRuntime {
   /** Diagnostics: why the engine might not be trading. */
   private dataFailures = 0;
   private lastDataError = '';
+
+  /** True once the runtime is wired and safe to tick (background task guard). */
+  get isReady(): boolean {
+    return this.inited && !!this.bot && !!this.rest;
+  }
 
   engineHealth(): {
     restBase: string;

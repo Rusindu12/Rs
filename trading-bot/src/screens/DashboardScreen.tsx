@@ -212,6 +212,12 @@ export function DashboardScreen() {
           />
         </View>
         <Button label="🚨 Emergency Stop — close everything" tone="danger" onPress={() => setConfirmStop(true)} />
+        {running && !demoMode && positions.length > 0 && (
+          <Text style={styles.protectionNote}>
+            🛡 {positions.filter((p) => p.serverOcoId).length}/{positions.length} position(s) protected on Binance's
+            servers — SL/TP execute even when the app is closed or you are offline
+          </Text>
+        )}
       </Card>
 
       {/* top 10 tickers */}
@@ -307,6 +313,7 @@ function PnlCell({ label, value, pct }: { label: string; value: number; pct: num
 }
 
 const styles = StyleSheet.create({
+  protectionNote: { color: colors.textDim, fontSize: 10, marginTop: 10, lineHeight: 15, textAlign: 'center' },
   netBanner: {
     borderWidth: 1,
     borderRadius: 12,

@@ -8,6 +8,7 @@ import { colors } from './src/theme';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { LockScreen } from './src/screens/LockScreen';
+import { registerBackgroundTick } from './src/services/backgroundTick';
 
 /**
  * AI Trading Bot — root component.
@@ -25,7 +26,10 @@ export default function App() {
   const demoMode = useAuthStore((s) => s.demoMode);
 
   useEffect(() => {
-    void runtime.init().then(() => setBooted(true));
+    void runtime.init().then(() => {
+      setBooted(true);
+      void registerBackgroundTick(); // keep trading while the app is backgrounded (Android)
+    });
   }, []);
 
   useEffect(() => {
