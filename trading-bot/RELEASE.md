@@ -13,3 +13,7 @@
   seeds and refines each; CI budget raised to 500 evaluated configs.
 - **Parity fix**: the app's Multi-TF confluence now uses the trained RSI
   thresholds (identical math to the backtester — factor-by-factor unit-tested).
+
+## v6.2.1
+
+- Profile tab polish release (marker commit for CI publish).
