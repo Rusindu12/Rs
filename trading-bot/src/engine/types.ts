@@ -162,7 +162,7 @@ export const ACTION_SCORE: Record<SignalStrength, number> = {
 /** True when `a` is at least as strong a buy signal as `b`. */
 export type TradeMode = 'chill' | 'normal' | 'turbo';
 /** Minimum composite score for a BUY entry under each trade mode. */
-export const TRADE_MODE_FLOOR: Record<TradeMode, number> = { chill: 30, normal: 20, turbo: 12 };
+export const TRADE_MODE_FLOOR: Record<TradeMode, number> = { chill: 30, normal: 20, turbo: 8 };
 
 /** Entry gate shared by the bot and the tests. */
 export function shouldEnter(score: number, action: SignalStrength, mode: TradeMode, minSignal: SignalStrength): boolean {

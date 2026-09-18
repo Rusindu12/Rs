@@ -155,7 +155,7 @@ export function SettingsScreen() {
             ? 'Only confirmed BUY/STRONG_BUY signals (score ≥ 30) open trades. Fewer, higher-quality entries.'
             : config.tradeMode === 'normal'
               ? 'Opens trades from score ≥ 20 — recommended. Steady trading without chasing noise.'
-              : 'Opens trades from score ≥ 12 and bypasses the trend gate. Most trades — expect more noise.'}
+              : 'Opens trades from score ≥ 8 and bypasses the trend gate. Most trades — expect more noise.'}
         </Text>
 
         <Text style={styles.label}>Minimum signal (Chill mode)</Text>

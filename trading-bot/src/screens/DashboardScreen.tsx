@@ -172,6 +172,13 @@ export function DashboardScreen() {
         </View>
       </Card>
 
+      {!running && (
+        <View style={styles.idleBanner}>
+          <Text style={styles.idleBannerTitle}>⚠ Bot is IDLE — trading is OFF</Text>
+          <Text style={styles.idleBannerText}>Press ▶ Start below. In demo mode it now starts automatically.</Text>
+        </View>
+      )}
+
       {/* quick actions */}
       <Card>
         <CardTitle>QUICK ACTIONS</CardTitle>
@@ -287,6 +294,16 @@ function PnlCell({ label, value, pct }: { label: string; value: number; pct: num
 }
 
 const styles = StyleSheet.create({
+  idleBanner: {
+    backgroundColor: '#F0B90B14',
+    borderColor: '#F0B90B66',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  idleBannerTitle: { color: colors.gold, fontWeight: '800', fontSize: 13 },
+  idleBannerText: { color: colors.textDim, fontSize: 11, marginTop: 3 },
   connRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   connItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connText: { color: colors.textDim, fontSize: 11.5 },

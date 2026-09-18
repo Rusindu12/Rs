@@ -15,9 +15,9 @@ describe('trade-mode entry gate (why-is-it-not-trading fix)', () => {
     expect(shouldEnter(35, 'BUY', 'normal', 'BUY')).toBe(true);
   });
 
-  it('turbo mode opens from score ≥ 12', () => {
-    expect(shouldEnter(12, 'HOLD', 'turbo', 'BUY')).toBe(true);
-    expect(shouldEnter(11, 'HOLD', 'turbo', 'BUY')).toBe(false);
+  it('turbo mode opens from score ≥ 8', () => {
+    expect(shouldEnter(8, 'HOLD', 'turbo', 'BUY')).toBe(true);
+    expect(shouldEnter(7.9, 'HOLD', 'turbo', 'BUY')).toBe(false);
   });
 
   it('never enters on sell-side signals in any mode', () => {

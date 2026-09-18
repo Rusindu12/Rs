@@ -14,6 +14,7 @@ import { AdaptiveLearner, EMPTY_STATE, type AdaptiveState } from './adaptive';
 import { effectiveWeights, TRAINED } from './training';
 import { LiveProvider, PaperProvider } from './providers';
 import { generateSignal } from './signalEngine';
+import type { Signal } from './types';
 import type { SymbolMarketData, TradingProvider } from './types';
 import {
   DEFAULT_SYMBOLS,
@@ -92,6 +93,10 @@ class AppRuntime {
       }
     } else if (demo) {
       await this.wireDemo();
+      // Demo = paper money. Auto-start so the app actually trades out of the
+      // box instead of sitting idle behind a Start button nobody notices.
+      this.startBot();
+      this.storeLogger.log('info', 'demo bot auto-started — paper trading with $10,000 simulated funds');
     }
   }
 
@@ -374,6 +379,22 @@ class AppRuntime {
     useBotStore.getState().syncEngine({ ticking: true, positions: this.bot.positions, trades: this.bot.trades });
     try {
       const result = await this.bot.tick();
+      // heartbeat: make every scan visible so "is it working?" is always answerable
+      try {
+        const best = result.signals.reduce<Signal | null>((b, x) => (!b || Math.abs(x.score) > Math.abs(b.score) ? x : b), null);
+        const floor = this.bot.config.tradeMode === 'chill'
+          ? 30
+          : this.bot.config.tradeMode === 'turbo'
+            ? 8
+            : 20;
+        const eligible = result.signals.filter((x) => x.score >= floor).length;
+        this.storeLogger.log(
+          'info',
+          `scanned ${result.signals.length} · best ${best ? `${best.symbol} ${best.score >= 0 ? '+' : ''}${best.score.toFixed(0)} (${best.action})` : '—'} · entry-ready ${eligible} · opened ${result.opened.length} · closed ${result.closed.length}`
+        );
+      } catch {
+        /* heartbeat must never break the tick */
+      }
       // continual learning: record fresh signals, resolve matured ones
       for (const sig of result.signals) {
         this.learner.record({

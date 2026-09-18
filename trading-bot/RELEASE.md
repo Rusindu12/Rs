@@ -1,5 +1,17 @@
 # Release notes
 
+## v6.3.2 — FIX: "the bot never trades" (root cause: it was never started)
+
+- **Demo mode now auto-starts the paper bot** the moment the app opens — no
+  hidden Start button required. It trades with $10,000 simulated funds from launch.
+- **Heartbeat log** — every scan cycle now writes a one-line summary to the
+  engine log: `scanned 6 · best SOLUSDT +41 (BUY) · entry-ready 2 · opened 0 · closed 0`.
+  If the app is alive you SEE it working in Trades → Engine log.
+- **Dashboard idle banner** — when the bot is not running (keyed live/testnet
+  modes) a gold warning explains that trading is OFF and where Start is.
+- Turbo trade-frequency floor lowered to score ≥ 8 for more aggressive entry
+  counting (measured: ~37% of bars reach it in trending conditions).
+
 ## v6.3 — FIX: "no trades happening" — network resilience + trade modes
 
 - **Mirror failover for market data**: REST klines/tickers now rotate through
