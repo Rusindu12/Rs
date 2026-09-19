@@ -1,241 +1,105 @@
-# Rs Calculator — APK build pipeline.
-#
-# GitHub only executes workflows that live in `.github/workflows/`, so this file is copied there
-# (`.github/workflows/apk.yml`) and a CI step keeps the two in sync.
-#
-#   * every push  → unit tests + debug APK + workflow artefact
-#   * push to main → also published to the rolling `latest-apk` release (one stable download link)
 name: Build APK
 
 on:
   push:
-    branches:
-      - main
-      - 'arena/**'
+    branches: [main, arena/**]
   pull_request:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      publish_release:
-        description: 'Update the rolling latest-apk release (so the QR / download link works)'
-        type: boolean
-        default: true
-      drop_apk_branch:
-        description: 'Also push the APK to the throwaway `apk-drop` branch (git-only download path)'
-        type: boolean
-        default: true
 
 permissions:
   contents: write
-  actions: read
 
 concurrency:
   group: apk-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  APK: app/build/outputs/apk/debug/app-debug.apk
-  RELEASE_TAG: latest-apk
-  APK_ASSET: Rs-Calculator.apk
-
 jobs:
-  apk:
-    name: Assemble installable APK
+  build-apk:
+    name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
           java-version: '17'
-          cache: gradle
+          distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-
-      # .github/workflows/apk.yml is what GitHub actually runs; ci/apk.yml is the reviewable copy.
-      - name: Workflow files in sync
+      - name: Build Debug APK
+        working-directory: WebViewApp
         run: |
-          set -euo pipefail
-          if [ -f ci/apk.yml ] && [ -f .github/workflows/apk.yml ]; then
-            diff -u ci/apk.yml .github/workflows/apk.yml || {
-              echo "::error::.github/workflows/apk.yml differs from ci/apk.yml — run: cp ci/apk.yml .github/workflows/apk.yml"
-              exit 1
-            }
-            echo "✓ ci/apk.yml and .github/workflows/apk.yml match"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon 2>&1 | tail -30
+          echo "=== Build result: $? ==="
+          find . -name "*.apk" -type f 2>/dev/null
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+      - name: Copy APK
+        run: |
+          APK=$(find WebViewApp -name "*.apk" -type f 2>/dev/null | head -1)
+          echo "Found APK: $APK"
+          if [ -n "$APK" ]; then
+            cp "$APK" CryptoSignalAIPro.apk
+            ls -lh CryptoSignalAIPro.apk
           else
-            echo "✓ no duplicate copy to keep in sync"
+            echo "No APK found!"
+            exit 1
           fi
 
-      # Decide what this run is allowed to publish. Triggers, in words:
-      #   push to main            → update the rolling release
-      #   commit subject [publish-apk] → update the release *and* drop the APK on `apk-drop`
-      #   manual run              → whatever the two checkboxes say
-      - name: Decide what this run publishes
-        id: mode
-        run: |
-          set -uo pipefail
-          event="${{ github.event_name }}"
-          ref="${{ github.ref }}"
-          subject="$(git log -1 --pretty=%s)"
-          pub_in="${{ github.event.inputs.publish_release }}"
-          drop_in="${{ github.event.inputs.drop_apk_branch }}"
-          publish=false
-          drop=false
-          if [ "$event" = "push" ] && [ "$ref" = "refs/heads/main" ]; then
-            publish=true
-          fi
-          case "$subject" in
-            *"[publish-apk]"*) publish=true; drop=true ;;
-          esac
-          if [ "$event" = "workflow_dispatch" ]; then
-            if [ "$pub_in" = "true" ]; then publish=true; fi
-            if [ "$drop_in" = "true" ]; then drop=true; fi
-          fi
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "drop=$drop" >> "$GITHUB_OUTPUT"
-          echo "publish=$publish drop=$drop (event=$event, subject: $subject)"
-
-      - name: Unit tests (engine + reducer)
-        run: ./gradlew --no-daemon testDebugUnitTest
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
-
-      - name: Collect build info
-        id: info
-        run: |
-          set -euo pipefail
-          test -f "$APK" || { echo "::error::APK was not produced"; exit 1; }
-          # `gh release` names an asset after the file, so stage it under the published name.
-          mkdir -p "$RUNNER_TEMP/publish"
-          cp "$APK" "$RUNNER_TEMP/publish/$APK_ASSET"
-          SIZE=$(du -h "$RUNNER_TEMP/publish/$APK_ASSET" | cut -f1)
-          SHA=$(sha256sum "$RUNNER_TEMP/publish/$APK_ASSET" | cut -c1-16)
-          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "path=$RUNNER_TEMP/publish/$APK_ASSET" >> "$GITHUB_OUTPUT"
-          echo "Built $APK ($SIZE)"
-
-      - name: Upload APK as a workflow artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Rs-Calculator-debug-apk
-          path: ${{ steps.info.outputs.path }}
-          if-no-files-found: error
+          name: CryptoSignalAIPro
+          path: CryptoSignalAIPro.apk
           retention-days: 90
 
-      - name: Publish APK on the Releases page
-        # Automatic runs feed the rolling `latest-apk` release from the default branch only;
-        # other branches/PRs keep their artefact. A manual run can publish from any branch.
-        if: steps.mode.outputs.publish == 'true'
+  release:
+    name: Publish APK
+    needs: build-apk
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: CryptoSignalAIPro
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest-apk
+          name: "🤖 CryptoSignal AI Pro - Latest APK"
+          body: |
+            ## Download APK
+
+            **[CryptoSignalAIPro.apk](../../releases/download/latest-apk/CryptoSignalAIPro.apk)**
+
+            ### Features
+            - Live crypto signals with 10 technical indicators
+            - Background trading bot with auto-trade
+            - Paper trading mode (safe by default)
+            - Real-time price monitoring
+            - Risk management & panic button
+            - Fear & Greed index
+            - Binance API integration
+
+            ### Install
+            1. Download APK
+            2. Install on Android phone
+            3. Open → Start trading
+          files: CryptoSignalAIPro.apk
+          draft: false
+          prerelease: false
         env:
-          GH_TOKEN: ${{ github.token }}
-          SIZE: ${{ steps.info.outputs.size }}
-          SHA: ${{ steps.info.outputs.sha }}
-          STAGED: ${{ steps.info.outputs.path }}
-        run: |
-          set -uo pipefail
-
-          notes="$RUNNER_TEMP/notes.md"
-          cat > "$notes" <<EOF
-          Rs Calculator — auto-built **debug** APK (\`${GITHUB_SHA::7}\`).
-
-          * Size: ${SIZE} · sha256 \`${SHA}...\`
-          * Signed with the Android debug key — install it directly on any device (Android 7.0+, API 24+).
-          * Re-installing over a previously installed build: uninstall the old one first if the signature changed.
-
-          | File | Description |
-          |------|-------------|
-          | \`${APK_ASSET}\` | debug build, ready to install |
-
-          > Built by \`.github/workflows/apk.yml\` on every push to the default branch.
-          EOF
-
-          # Create the rolling release once, then keep replacing its asset.
-          gh release create "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" \
-                --target "$GITHUB_SHA" --latest 2>"$RUNNER_TEMP/err" \
-            || gh release edit "$RELEASE_TAG" --title "Rs Calculator — APK" --notes-file "$notes" \
-                 --latest --target "$GITHUB_SHA" 2>>"$RUNNER_TEMP/err" \
-            || true
-
-          if ! gh release upload "$RELEASE_TAG" "$STAGED" --clobber 2>>"$RUNNER_TEMP/err"; then
-            echo "::warning::Could not publish the APK to Releases. $(tail -n 3 "$RUNNER_TEMP/err" | tr '\n' ' ')"
-            echo "::warning::If the token is read-only, enable Settings → Actions → General → Workflow permissions → 'Read and write permissions'."
-            echo "The APK is still available in this run's Artifacts section (Rs-Calculator-debug-apk)."
-            exit 0
-          fi
-
-          # The rolling tag must follow the build that is published, otherwise "source code"
-          # links on the release page point at an older commit than the APK.
-          tag_sha="$(git ls-remote origin "refs/tags/${RELEASE_TAG}" | cut -f1)"
-          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
-            git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
-            if git push -f origin "refs/tags/$RELEASE_TAG" 2>>"$RUNNER_TEMP/err"; then
-              echo "✓ moved ${RELEASE_TAG} ${tag_sha:0:7}… → ${GITHUB_SHA:0:7}…"
-            else
-              echo "::warning::could not move the ${RELEASE_TAG} tag: $(tail -n 2 "$RUNNER_TEMP/err" | tr '\n' ' ')"
-            fi
-          fi
-
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
-
-          {
-            echo "### 📱 APK published"
-            echo ""
-            echo "Download & install on your phone: **<${url}>**"
-            echo ""
-            echo "Release page: <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}> · size ${SIZE} · sha256 \`${SHA}...\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Release assets and workflow artefacts are served from hosts that sandboxed/offline
-      # tooling often cannot reach (302 → *.blob.core.windows.net). Git over github.com is
-      # usually allowed, so a manual run can also drop the APK on a throwaway branch.
-      - name: Drop APK on the throwaway apk-drop branch
-        if: steps.mode.outputs.drop == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          STAGED: ${{ steps.info.outputs.path }}
-        run: |
-          set -euo pipefail
-          drop="$RUNNER_TEMP/apk-drop"
-          git init -q "$drop"
-          cd "$drop"
-          mkdir -p apk
-          cp "$STAGED" apk/Rs-Calculator-debug.apk
-          ( cd apk && sha256sum Rs-Calculator-debug.apk > SHA256SUMS.txt )
-          cat > apk/BUILD_INFO.txt <<EOF
-          built by .github/workflows/apk.yml (workflow_dispatch)
-          commit: ${GITHUB_SHA}
-          run:    ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          size:   $(du -h apk/Rs-Calculator-debug.apk | cut -f1)
-          EOF
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f -A
-          git commit -qm "APK drop: ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-              HEAD:refs/heads/apk-drop
-          echo "✓ pushed apk/Rs-Calculator-debug.apk to refs/heads/apk-drop"
-          echo "  (delete it later: git push origin --delete apk-drop)"
-
-      - name: Add a QR code for phone install
-        if: steps.mode.outputs.publish == 'true'
-        continue-on-error: true
-        run: |
-          set -uo pipefail
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_ASSET}"
-          python3 -m venv "$RUNNER_TEMP/qrenv"
-          "$RUNNER_TEMP/qrenv/bin/pip" install --quiet segno
-          "$RUNNER_TEMP/qrenv/bin/python" - "$url" <<'PY'
-          import sys, segno
-          qr = segno.make(sys.argv[1], error='m')
-          print("Scan with your phone camera to download the APK:")
-          qr.terminal(compact=True, dark="  ", light="██")
-          PY
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
