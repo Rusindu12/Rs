@@ -211,25 +211,37 @@ jobs:
 
       - name: Build Debug APK
         working-directory: CryptoSignalProTrader/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -50
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -80
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+      - name: Check build result
+        working-directory: CryptoSignalProTrader/android
+        run: |
+          echo "=== Build directory contents ==="
+          ls -la app/build/ 2>/dev/null || echo "No build directory"
+          echo "=== APK outputs ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
 
       - name: Find APK
         id: find-apk
         working-directory: CryptoSignalProTrader/android
         run: |
-          echo "=== Searching for APK files ==="
-          find . -name "*.apk" -type f 2>/dev/null
-          echo "=== Checking build outputs ==="
-          find app/build/outputs -type f 2>/dev/null | head -20
-          APK_PATH=$(find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
+          echo "=== Build outputs ==="
+          find app/build -type f -name "*.apk" 2>/dev/null || echo "No APK in app/build"
+          find . -maxdepth 5 -name "*.apk" -type f 2>/dev/null || echo "No APK found anywhere"
+          ls -la app/build/outputs/ 2>/dev/null || echo "No outputs dir"
+          ls -la app/build/outputs/apk/ 2>/dev/null || echo "No apk dir"
+          # Try to find the APK
+          APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -n "$APK_PATH" ]; then
+            echo "Found APK at: $APK_PATH"
             cp "$APK_PATH" ../CryptoSignalAIPro.apk
-            echo "Copied APK to project root"
+          else
+            echo "WARNING: No APK found! Checking build logs..."
+            # Check if build actually succeeded
+            ls -la app/build/ 2>/dev/null || echo "No build dir"
           fi
 
       - name: Upload APK artifact
@@ -238,7 +250,6 @@ jobs:
           name: CryptoSignalAIPro
           path: |
             CryptoSignalProTrader/CryptoSignalAIPro.apk
-            CryptoSignalProTrader/android/app/build/outputs/**/*.apk
           retention-days: 90
           if-no-files-found: warn
 
