@@ -39,6 +39,12 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      - name: Setup Android SDK & NDK
+        run: |
+          # Install NDK (required for React Native)
+          sdkmanager --install "ndk;25.1.8937393" 2>/dev/null || true
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+
       - name: Install npm dependencies
         working-directory: CryptoSignalProTrader
         run: npm install --legacy-peer-deps
@@ -209,20 +215,29 @@ jobs:
       - name: Make Gradlew executable
         run: chmod +x CryptoSignalProTrader/android/gradlew
 
+      - name: Setup Gradle properties
+        working-directory: CryptoSignalProTrader/android
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> gradle.properties
+          echo "ndk.dir=$ANDROID_HOME/ndk/25.1.8937393" >> local.properties 2>/dev/null || true
+
       - name: Build Debug APK
         working-directory: CryptoSignalProTrader/android
         run: |
           set -o pipefail
           ./gradlew assembleDebug --no-daemon 2>&1 | tee build.log || {
-            echo "=== BUILD FAILED ==="
-            tail -100 build.log
+            echo "=== GRADLE BUILD FAILED ==="
+            echo "=== Last 150 lines of build.log ==="
+            tail -150 build.log
+            echo "=== END OF BUILD LOG ==="
             exit 1
           }
-          echo "=== BUILD SUCCEEDED ==="
-          find . -name "*.apk" -type f
+          echo "=== GRADLE BUILD SUCCEEDED ==="
+          find . -name "*.apk" -type f 2>/dev/null
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.1.8937393
 
       - name: Check build result
         working-directory: CryptoSignalProTrader/android
