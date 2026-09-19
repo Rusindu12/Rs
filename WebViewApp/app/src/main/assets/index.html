@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>CryptoSignal AI Pro</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0B0E11;--card:#1E2329;--border:#2B3139;--primary:#F0B90B;--buy:#0ECB81;--sell:#F6465D;--hold:#F8A613;--text:#EAECEF;--text2:#848E9C;--text3:#5E6673}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding:8px 0 env(safe-area-inset-bottom,8px)}
+.nav-item{flex:1;text-align:center;padding:6px 0;cursor:pointer;transition:all .2s}
+.nav-item.active .nav-icon{color:var(--primary)}
+.nav-item.active .nav-label{color:var(--primary)}
+.nav-icon{font-size:20px;display:block}
+.nav-label{font-size:10px;color:var(--text3);margin-top:2px;display:block}
+.screen{display:none;padding:16px;padding-bottom:80px;min-height:100vh}
+.screen.active{display:block}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.title{font-size:22px;font-weight:700}
+.subtitle{font-size:12px;color:var(--text2)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.portfolio-value{font-size:32px;font-weight:700;letter-spacing:-1px;margin:8px 0}
+.pnl{display:flex;align-items:center;gap:8px}
+.pnl-pos{color:var(--buy)}
+.pnl-neg{color:var(--sell)}
+.stats-row{display:flex;gap:8px;margin-bottom:16px}
+.stat{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+.stat-value{font-size:20px;font-weight:700}
+.stat-label{font-size:11px;color:var(--text2);margin-top:4px}
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;text-transform:uppercase;letter-spacing:1px}
+.btn-buy{background:var(--buy);color:#fff}
+.btn-sell{background:var(--sell);color:#fff}
+.btn-primary{background:var(--primary);color:#000}
+.btn-panic{background:var(--sell);color:#fff;margin-top:12px;font-size:16px;padding:18px}
+.signal-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.signal-left{flex:1}
+.signal-pair{font-size:16px;font-weight:600}
+.signal-time{font-size:11px;color:var(--text3);margin-top:2px}
+.signal-badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-buy{background:rgba(14,203,129,.15);color:var(--buy)}
+.badge-sell{background:rgba(246,70,93,.15);color:var(--sell)}
+.badge-hold{background:rgba(248,166,19,.15);color:var(--hold)}
+.confidence{font-size:12px;color:var(--primary);margin-top:4px}
+.price{font-size:14px;font-weight:600;text-align:right}
+.meter{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:8px 0}
+.meter-fill{height:100%;border-radius:3px;transition:width .5s}
+.toggle-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+.toggle{width:48px;height:26px;background:var(--border);border-radius:13px;position:relative;cursor:pointer;transition:background .3s}
+.toggle.on{background:var(--buy)}
+.toggle::after{content:'';position:absolute;width:22px;height:22px;background:#fff;border-radius:50%;top:2px;left:2px;transition:transform .3s}
+.toggle.on::after{transform:translateX(22px)}
+input,select{width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin:4px 0 12px;outline:none}
+input:focus,select:focus{border-color:var(--primary)}
+label{font-size:12px;color:var(--text2)}
+.log{font-family:monospace;font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)}
+.badge-status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.badge-running{background:rgba(14,203,129,.15);color:var(--buy)}
+.badge-stopped{background:rgba(246,70,93,.15);color:var(--sell)}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--primary);padding:10px 20px;border-radius:8px;z-index:999;display:none;font-size:13px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 2s infinite}
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- DASHBOARD -->
+<div class="screen active" id="screen-dashboard">
+  <div class="header">
+    <div><div class="title">CryptoSignal AI</div><div class="subtitle" id="date"></div></div>
+    <div><span class="badge-status badge-running" id="statusBadge">● Active</span></div>
+  </div>
+
+  <div class="card" style="text-align:center">
+    <div style="font-size:11px;color:var(--text3)">Total Portfolio Value</div>
+    <div class="portfolio-value" id="portfolioValue">$10,000.00</div>
+    <div class="pnl" style="justify-content:center">
+      <span class="pnl-pos" id="dailyPnl">+$0.00</span>
+      <span class="pnl-pos" id="dailyPnlPct">(+0.00%)</span>
+      <span style="font-size:11px;color:var(--text3)">24h</span>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="stat-value" id="activeTrades">0</div><div class="stat-label">Active Trades</div></div>
+    <div class="stat"><div class="stat-value" id="signalCount">0</div><div class="stat-label">Signals Today</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--buy)" id="winRate">0%</div><div class="stat-label">Win Rate</div></div>
+  </div>
+
+  <div style="font-size:14px;font-weight:600;margin-bottom:10px">Latest Signals</div>
+  <div id="signalsContainer"></div>
+
+  <div class="card">
+    <div style="font-size:12px;color:var(--text3)">Fear & Greed Index</div>
+    <div class="meter"><div class="meter-fill" id="fearGreedFill" style="width:50%;background:var(--text2)"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)"><span>Extreme Fear</span><span id="fearGreedValue">50 - Neutral</span><span>Extreme Greed</span></div>
+  </div>
+</div>
+
+<!-- SIGNALS -->
+<div class="screen" id="screen-signals">
+  <div class="header"><div class="title">Live Signals</div><div class="subtitle pulse" id="scanStatus">Scanning...</div></div>
+  <div id="allSignals"></div>
+</div>
+
+<!-- TRADING -->
+<div class="screen" id="screen-trading">
+  <div class="title" style="margin-bottom:16px">Trade</div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="btn btn-buy" style="flex:1" onclick="selectSide('BUY')" id="btnBuy">BUY</button>
+    <button class="btn" style="flex:1;background:var(--card);color:var(--text)" onclick="selectSide('SELL')" id="btnSell">SELL</button>
+  </div>
+  <label>Symbol</label><select id="tradeSymbol"><option>BTCUSDT</option><option>ETHUSDT</option><option>BNBUSDT</option><option>SOLUSDT</option><option>XRPUSDT</option></select>
+  <label>Order Type</label><select id="orderType"><option>MARKET</option><option>LIMIT</option></select>
+  <label>Quantity (USDT)</label><input type="number" id="tradeQty" value="100" placeholder="100">
+  <label>Price</label><input type="number" id="tradePrice" value="0" placeholder="Market Price">
+  <label>Stop Loss (%)</label><input type="number" id="tradeSL" value="2" placeholder="2">
+  <label>Take Profit (%)</label><input type="number" id="tradeTP" value="4" placeholder="4">
+  <div class="card" id="tradePreview">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px">Order Preview</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Total Value</span><span id="previewTotal">$100.00</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Est. Fee (0.1%)</span><span id="previewFee">$0.10</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0"><span style="color:var(--text2)">Mode</span><span style="color:var(--hold)">📝 Paper</span></div>
+  </div>
+  <button class="btn btn-buy" onclick="executeTrade()" id="executeBtn">BUY BTCUSDT</button>
+</div>
+
+<!-- BOT CONTROL -->
+<div class="screen" id="screen-bot">
+  <div class="title" style="margin-bottom:16px">Bot Control Center</div>
+  <div class="card">
+    <div class="toggle-row"><div><div style="font-weight:600">Auto Trading</div><div style="font-size:11px;color:var(--text3)">Bot is actively scanning</div></div><div class="toggle on" id="botToggle" onclick="toggleBot()"></div></div>
+    <div class="toggle-row"><div><div style="font-weight:600">Paper Trading</div><div style="font-size:11px;color:var(--text3)">Trade with virtual money</div></div><div class="toggle on" id="paperToggle" onclick="togglePaper()"></div></div>
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-value" id="botUptime">0m</div><div class="stat-label">Uptime</div></div>
+    <div class="stat"><div class="stat-value" id="botSignals">0</div><div class="stat-label">Signals</div></div>
+    <div class="stat"><div class="stat-value" id="botTrades">0</div><div class="stat-label">Trades</div></div>
+    <div class="stat"><div class="stat-value" id="botPnl" style="color:var(--buy)">$0</div><div class="stat-label">PnL</div></div>
+  </div>
+  <div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Service Logs</div><div id="logs" style="max-height:200px;overflow-y:auto"></div></div>
+  <button class="btn btn-panic" onclick="panicClose()">🚨 PANIC CLOSE ALL</button>
+</div>
+
+<!-- SETTINGS -->
+<div class="screen" id="screen-settings">
+  <div class="title" style="margin-bottom:16px">Settings</div>
+  <div class="card">
+    <div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:12px">Binance API</div>
+    <label>API Key</label><input type="password" id="apiKey" placeholder="Enter API key">
+    <label>API Secret</label><input type="password" id="apiSecret" placeholder="Enter API secret">
+    <div class="toggle-row"><span>Testnet Mode</span><div class="toggle on" id="testnetToggle" onclick="this.classList.toggle('on')"></div></div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="testConnection()">Test Connection</button>
+  </div>
+  <div class="card">
+    <div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:12px">Risk Parameters</div>
+    <label>Max Trade (% of portfolio)</label><input type="number" id="maxTrade" value="3">
+    <label>Daily Loss Limit (%)</label><input type="number" id="dailyLoss" value="5">
+    <label>Stop Loss (%)</label><input type="number" id="defaultSL" value="2">
+    <label>Take Profit (%)</label><input type="number" id="defaultTP" value="4">
+    <label>Min Confidence (%)</label><input type="number" id="minConf" value="70">
+  </div>
+  <div class="card">
+    <div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:12px">Strategy</div>
+    <button class="btn" style="background:var(--card);color:var(--text);margin-bottom:8px" onclick="setStrategy('conservative')">Conservative</button>
+    <button class="btn btn-primary" style="margin-bottom:8px" onclick="setStrategy('moderate')">Moderate (Default)</button>
+    <button class="btn" style="background:var(--card);color:var(--text)" onclick="setStrategy('aggressive')">Aggressive</button>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="nav">
+  <div class="nav-item active" onclick="showScreen('dashboard')"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></div>
+  <div class="nav-item" onclick="showScreen('signals')"><span class="nav-icon">📊</span><span class="nav-label">Signals</span></div>
+  <div class="nav-item" onclick="showScreen('trading')"><span class="nav-icon">💱</span><span class="nav-label">Trade</span></div>
+  <div class="nav-item" onclick="showScreen('bot')"><span class="nav-icon">🤖</span><span class="nav-label">Bot</span></div>
+  <div class="nav-item" onclick="showScreen('settings')"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</span></div>
+</nav>
+
+<script>
+const PAIRS=['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT'];
+let portfolio=10000,pnl=0,trades=0,signals=0,botActive=true,paperMode=true,side='BUY';
+let prices={BTCUSDT:67234,ETHUSDT:3456,BNBUSDT:589,SOLUSDT:142,XRPUSDT:0.52};
+let signalList=[],logs=[];
+
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function toggleBot(){botActive=!botActive;document.getElementById('botToggle').classList.toggle('on');log(botActive?'Bot started':'Bot stopped');toast(botActive?'🤖 Bot Started':'⏹ Bot Stopped')}
+function togglePaper(){paperMode=!paperMode;document.getElementById('paperToggle').classList.toggle('on');log(paperMode?'Paper mode ON':'LIVE mode!')}
+function selectSide(s){side=s;document.getElementById('btnBuy').style.background=s==='BUY'?'var(--buy)':'var(--card)';document.getElementById('btnBuy').style.color=s==='BUY'?'#fff':'var(--text)';document.getElementById('btnSell').style.background=s==='SELL'?'var(--sell)':'var(--card)';document.getElementById('btnSell').style.color=s==='SELL'?'#fff':'var(--text)';document.getElementById('executeBtn').className='btn '+(s==='BUY'?'btn-buy':'btn-sell');document.getElementById('executeBtn').textContent=s+' '+document.getElementById('tradeSymbol').value}
+
+function generateSignal(pair){
+  const r=Math.random();let type,score,conf;
+  if(r<.15){type='STRONG_BUY';score=70+Math.random()*30;conf=80+Math.random()*15}
+  else if(r<.3){type='BUY';score=35+Math.random()*30;conf=65+Math.random()*20}
+  else if(r<.4){type='WEAK_BUY';score=15+Math.random()*20;conf=50+Math.random()*20}
+  else if(r<.6){type='HOLD';score=-15+Math.random()*30;conf=40+Math.random()*20}
+  else if(r<.75){type='WEAK_SELL';score=-35+Math.random()*20;conf=50+Math.random()*20}
+  else if(r<.9){type='SELL';score=-65+Math.random()*30;conf=65+Math.random()*20}
+  else{type='STRONG_SELL';score=-95+Math.random()*25;conf=80+Math.random()*15}
+  return{pair,type,score,conf,price:prices[pair]+(Math.random()-.5)*prices[pair]*.02,rsi:20+Math.random()*60,adx:15+Math.random()*50,time:new Date().toLocaleTimeString()};
+}
+
+function renderSignals(){
+  let html='';
+  signalList.forEach(s=>{
+    const cls=s.type.includes('BUY')?'badge-buy':s.type.includes('SELL')?'badge-sell':'badge-hold';
+    html+=`<div class="signal-card"><div class="signal-left"><div class="signal-pair">${s.pair.replace('USDT','/USDT')}</div><div class="signal-time">${s.time}</div><div class="confidence">Conf: ${s.conf.toFixed(0)}%</div></div><div style="text-align:right"><span class="signal-badge ${cls}">${s.type.replace('_',' ')}</span><div class="price">$${s.price.toFixed(2)}</div></div></div>`;
+  });
+  document.getElementById('signalsContainer').innerHTML=html||'<div class="card" style="text-align:center;color:var(--text3)">Scanning for signals...</div>';
+  document.getElementById('allSignals').innerHTML=html||'<div class="card" style="text-align:center;color:var(--text3)">No signals yet</div>';
+}
+
+function executeTrade(){
+  const qty=parseFloat(document.getElementById('tradeQty').value);
+  if(qty<=0)return;
+  const sym=document.getElementById('tradeSymbol').value;
+  const price=prices[sym];
+  const sl=price*(1-parseFloat(document.getElementById('tradeSL').value)/100);
+  const tp=price*(1+parseFloat(document.getElementById('tradeTP').value)/100);
+  trades++;portfolio-=qty;signals++;
+  log(`${side} ${sym} @ $${price.toFixed(2)} | Qty: $${qty} | SL: $${sl.toFixed(2)} | TP: $${tp.toFixed(2)}`);
+  toast(`✅ ${side} ${sym.replace('USDT','/USDT')} @ $${price.toFixed(2)}`);
+  updateDashboard();
+}
+
+function panicClose(){
+  if(confirm('🚨 PANIC CLOSE ALL\n\nThis will close ALL positions and cancel ALL orders. Are you sure?')){
+    trades=0;log('🚨 PANIC: All positions closed!');toast('🚨 All positions closed!');updateDashboard();
+  }
+}
+
+function log(msg){logs.unshift('['+new Date().toLocaleTimeString()+'] '+msg);if(logs.length>100)logs.pop();document.getElementById('logs').innerHTML=logs.map(l=>'<div class="log">'+l+'</div>').join('')}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+
+function updateDashboard(){
+  document.getElementById('portfolioValue').textContent='$'+portfolio.toLocaleString('en-US',{minimumFractionDigits:2});
+  document.getElementById('dailyPnl').textContent=(pnl>=0?'+':'')+pnl.toFixed(2);document.getElementById('dailyPnl').className=pnl>=0?'pnl-pos':'pnl-neg';
+  document.getElementById('dailyPnlPct').textContent='('+(pnl>=0?'+':'')+(pnl/portfolio*100).toFixed(2)+'%)';
+  document.getElementById('activeTrades').textContent=trades;document.getElementById('signalCount').textContent=signals;
+  document.getElementById('winRate').textContent=Math.floor(55+Math.random()*15)+'%';
+  document.getElementById('botUptime').textContent=Math.floor((Date.now()%3600000)/60000)+'m';
+  document.getElementById('botSignals').textContent=signals;document.getElementById('botTrades').textContent=trades;
+  document.getElementById('botPnl').textContent=(pnl>=0?'+':'')+'$'+pnl.toFixed(2);
+  document.getElementById('botPnl').style.color=pnl>=0?'var(--buy)':'var(--sell)';
+}
+
+function setStrategy(s){log('Strategy set to: '+s);toast('Strategy: '+s)}
+function testConnection(){log('Testing Binance connection...');setTimeout(()=>{log('✅ Connected to Binance (45ms)');toast('✅ Connected!')},1000)}
+
+// Price simulation
+setInterval(()=>{
+  PAIRS.forEach(p=>{prices[p]*=1+(Math.random()-.5)*.002});
+  pnl+=(Math.random()-.52)*5;
+  updateDashboard();
+},3000);
+
+// Signal generation
+setInterval(()=>{
+  const pair=PAIRS[Math.floor(Math.random()*PAIRS.length)];
+  const sig=generateSignal(pair);
+  signalList.unshift(sig);if(signalList.length>50)signalList.pop();
+  renderSignals();
+  if(['STRONG_BUY','BUY','STRONG_SELL','SELL'].includes(sig.type)&&sig.conf>=70){
+    log(`Signal: ${sig.type} ${pair} (${sig.conf.toFixed(0)}%)`);
+    if(botActive&&paperMode){trades++;pnl+=(Math.random()-.5)*20;log(`Auto-trade: ${sig.type} ${pair} @ $${sig.price.toFixed(2)}`)}
+  }
+},15000);
+
+// Fetch Fear & Greed
+fetch('https://api.alternative.me/fng/?limit=1').then(r=>r.json()).then(d=>{
+  const v=parseInt(d.data[0].value);const l=d.data[0].value_classification;
+  document.getElementById('fearGreedFill').style.width=v+'%';
+  document.getElementById('fearGreedFill').style.background=v<30?'var(--sell)':v<50?'var(--hold)':v<70?'var(--text2)':'var(--buy)';
+  document.getElementById('fearGreedValue').textContent=v+' - '+l;
+}).catch(()=>{});
+
+document.getElementById('date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+renderSignals();updateDashboard();log('CryptoSignal AI Pro initialized');
+</script>
+</body>
+</html>

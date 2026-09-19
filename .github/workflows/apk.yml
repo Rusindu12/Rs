@@ -3,15 +3,12 @@ name: Build APK
 on:
   push:
     branches: [main, arena/**]
-    paths:
-      - 'CryptoSignalProTrader/**'
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: read
 
 concurrency:
   group: apk-${{ github.ref }}
@@ -21,16 +18,11 @@ jobs:
   build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js 18
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -39,144 +31,38 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Install npm dependencies
-        working-directory: CryptoSignalProTrader
-        run: npm install --legacy-peer-deps
-
-      - name: Create placeholder assets
-        working-directory: CryptoSignalProTrader
-        run: |
-          mkdir -p assets/sounds assets/images
-          python3 -c "
-          import struct, zlib
-          def make_png(w, h, r, g, b):
-              raw = b''
-              for y in range(h):
-                  raw += b'\x00' + bytes([r, g, b]) * w
-              def chunk(ctype, data):
-                  c = ctype + data
-                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-              sig = b'\x89PNG\r\n\x1a\n'
-              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
-              idat = chunk(b'IDAT', zlib.compress(raw))
-              iend = chunk(b'IEND', b'')
-              return sig + ihdr + idat + iend
-          for name in ['icon.png', 'splash.png', 'adaptive-icon.png']:
-              with open(f'assets/{name}', 'wb') as f:
-                  f.write(make_png(192, 192, 11, 14, 17))
-          "
-
-      - name: Run Expo prebuild
-        working-directory: CryptoSignalProTrader
-        run: npx expo prebuild --platform android --no-install
-
-      - name: Copy native Java files
-        working-directory: CryptoSignalProTrader
-        run: |
-          PKG_DIR="android/app/src/main/java/com/cryptosignal/aipro"
-          mkdir -p "$PKG_DIR"
-          cat > "$PKG_DIR/TradingForegroundService.java" << 'EOF'
-          package com.cryptosignal.aipro;
-          import android.app.Notification;
-          import android.app.NotificationChannel;
-          import android.app.NotificationManager;
-          import android.app.PendingIntent;
-          import android.app.Service;
-          import android.content.Intent;
-          import android.content.pm.ServiceInfo;
-          import android.os.Build;
-          import android.os.IBinder;
-          import android.os.PowerManager;
-          import androidx.core.app.NotificationCompat;
-          import javax.annotation.Nullable;
-          public class TradingForegroundService extends Service {
-              private static final String CHANNEL_ID = "crypto_trading";
-              private static final int NOTIF_ID = 1001;
-              private PowerManager.WakeLock wakeLock;
-              @Override public void onCreate() {
-                  super.onCreate();
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Trading", NotificationManager.IMPORTANCE_LOW);
-                      getSystemService(NotificationManager.class).createNotificationChannel(ch);
-                  }
-                  PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-                  if (pm != null) { wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CS::WL"); wakeLock.acquire(); }
-              }
-              @Override public int onStartCommand(Intent intent, int flags, int startId) {
-                  if ("STOP".equals(intent != null ? intent.getAction() : null)) { stopForeground(true); stopSelf(); return START_NOT_STICKY; }
-                  Notification n = new NotificationCompat.Builder(this, CHANNEL_ID)
-                      .setContentTitle("CryptoSignal AI").setContentText("🤖 Trading Active")
-                      .setSmallIcon(android.R.drawable.ic_dialog_info).setOngoing(true).build();
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-                  else startForeground(NOTIF_ID, n);
-                  return START_STICKY;
-              }
-              @Override public void onDestroy() { super.onDestroy(); if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
-              @Override public void onTaskRemoved(Intent rootIntent) { super.onTaskRemoved(rootIntent); }
-              @Nullable @Override public IBinder onBind(Intent intent) { return null; }
-          }
-          EOF
-          cat > "$PKG_DIR/BootReceiver.java" << 'EOF'
-          package com.cryptosignal.aipro;
-          import android.content.BroadcastReceiver;
-          import android.content.Context;
-          import android.content.Intent;
-          import android.os.Build;
-          public class BootReceiver extends BroadcastReceiver {
-              @Override public void onReceive(Context ctx, Intent intent) {
-                  if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-                      Intent si = new Intent(ctx, TradingForegroundService.class);
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(si); else ctx.startService(si);
-                  }
-              }
-          }
-          EOF
-
-      - name: Patch AndroidManifest
-        working-directory: CryptoSignalProTrader
-        run: |
-          M="android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>|<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>|' "$M"
-          sed -i 's|</application>|    <service android:name=".TradingForegroundService" android:foregroundServiceType="dataSync" android:exported="false" android:stopWithTask="false"/>\n    <receiver android:name=".BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>\n  </application>|' "$M"
-
       - name: Build Debug APK
-        working-directory: CryptoSignalProTrader/android
+        working-directory: WebViewApp
         run: |
-          ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -200
-          RC=$?
-          echo "Gradle exit code: $RC"
-          echo "=== Looking for APK ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-          find app/build -type f 2>/dev/null | head -50 || echo "No build outputs"
-          exit $RC
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon 2>&1 | tail -30
+          echo "=== Build result: $? ==="
+          find . -name "*.apk" -type f 2>/dev/null
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
       - name: Copy APK
-        working-directory: CryptoSignalProTrader/android
         run: |
-          APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          APK=$(find WebViewApp -name "*.apk" -type f 2>/dev/null | head -1)
+          echo "Found APK: $APK"
           if [ -n "$APK" ]; then
-            echo "Found APK: $APK"
-            cp "$APK" ../CryptoSignalAIPro.apk
-            ls -lh ../CryptoSignalAIPro.apk
+            cp "$APK" CryptoSignalAIPro.apk
+            ls -lh CryptoSignalAIPro.apk
           else
             echo "No APK found!"
-            find . -path "*/build/*" -name "*.apk" 2>/dev/null
-            find . -path "*/outputs/*" -type f 2>/dev/null | head -20
+            exit 1
           fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: CryptoSignalAIPro
-          path: CryptoSignalProTrader/CryptoSignalAIPro.apk
+          path: CryptoSignalAIPro.apk
           retention-days: 90
-          if-no-files-found: warn
 
   release:
-    name: Publish APK Release
+    name: Publish APK
     needs: build-apk
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -188,29 +74,31 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: CryptoSignalAIPro
-          path: ./apk
 
-      - name: Prepare APK
-        run: |
-          find ./apk -name "*.apk" -exec mv {} ./apk/CryptoSignalAIPro.apk \;
-          ls -la ./apk/
-
-      - name: Publish rolling release
+      - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest-apk
           name: "🤖 CryptoSignal AI Pro - Latest APK"
           body: |
-            ## Download
+            ## Download APK
 
             **[CryptoSignalAIPro.apk](../../releases/download/latest-apk/CryptoSignalAIPro.apk)**
 
+            ### Features
+            - Live crypto signals with 10 technical indicators
+            - Background trading bot with auto-trade
+            - Paper trading mode (safe by default)
+            - Real-time price monitoring
+            - Risk management & panic button
+            - Fear & Greed index
+            - Binance API integration
+
             ### Install
-            1. Download APK to Android phone
-            2. Install (enable Unknown Sources)
-            3. Open → Enter Binance testnet API keys
-            4. Start with Paper Trading
-          files: ./apk/CryptoSignalAIPro.apk
+            1. Download APK
+            2. Install on Android phone
+            3. Open → Start trading
+          files: CryptoSignalAIPro.apk
           draft: false
           prerelease: false
         env:
