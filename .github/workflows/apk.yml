@@ -142,26 +142,29 @@ jobs:
       - name: Build Debug APK
         working-directory: CryptoSignalProTrader/android
         run: |
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee ../build.log
-          echo "Gradle exit code: $?"
+          ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -200
+          RC=$?
+          echo "Gradle exit code: $RC"
+          echo "=== Looking for APK ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          find app/build -type f 2>/dev/null | head -50 || echo "No build outputs"
+          exit $RC
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
-      - name: Find and copy APK
+      - name: Copy APK
         working-directory: CryptoSignalProTrader/android
         run: |
-          echo "=== Looking for APK ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-          find app/build/outputs -type f 2>/dev/null | head -30 || echo "No outputs"
-          APK=$(find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -1)
+          APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -n "$APK" ]; then
-            echo "Found: $APK"
+            echo "Found APK: $APK"
             cp "$APK" ../CryptoSignalAIPro.apk
-            ls -la ../CryptoSignalAIPro.apk
+            ls -lh ../CryptoSignalAIPro.apk
           else
-            echo "=== No APK found. Build log tail: ==="
-            tail -50 ../build.log 2>/dev/null || true
+            echo "No APK found!"
+            find . -path "*/build/*" -name "*.apk" 2>/dev/null
+            find . -path "*/outputs/*" -type f 2>/dev/null | head -20
           fi
 
       - name: Upload APK
