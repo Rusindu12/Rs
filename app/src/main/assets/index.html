@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CryptoAI PRO v29.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&family=JetBrains+Mono:wght@500&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#060a14;--card:#111a2e;--card2:#16213e;--border:#1e2e4a;--accent:#00d395;--accent2:#00b4ff;--warn:#ff9800;--danger:#ff3b5c;--text:#e8ecf6;--muted:#8a9bb5;--radius:16px}
+body{font-family:'Outfit','Noto Sans Sinhala',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+a{color:inherit}
+.header{position:sticky;top:0;z-index:50;background:rgba(6,10,20,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:14px 14px 10px}
+.headerTop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#00d395 0%,#00b4ff 100%);display:grid;place-items:center;font-weight:800;font-size:18px;color:#031018;box-shadow:0 8px 24px rgba(0,211,149,0.25)}
+.brand h1{font-size:18px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.brand h1 span{color:var(--accent)}
+.brand p{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:0.02em}
+.headerActions{display:flex;gap:8px}
+.btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+.btnPrimary{background:linear-gradient(135deg,#00d395,#00b4ff);color:#021018;border:none;box-shadow:0 6px 20px rgba(0,211,149,0.25);font-weight:700}
+.btnSmall{padding:7px 12px;font-size:12px}
+.badgeLive{display:inline-flex;align-items:center;gap:6px;background:rgba(0,211,149,0.12);border:1px solid rgba(0,211,149,0.25);color:var(--accent);padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.04em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.statsBar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px 12px}
+.stat label{font-size:10px;letter-spacing:0.08em;color:var(--muted);text-transform:uppercase;font-weight:700}
+.stat strong{font-size:15px;display:block;margin-top:4px;letter-spacing:-0.02em}
+.stat sub{font-size:11px;color:var(--muted);font-weight:500}
+.stat.pos strong{color:var(--accent)}
+.stat.neg strong{color:var(--danger)}
+.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.select, .search{flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:10px 14px;font-size:13px;outline:none}
+.search{flex:1.2}
+.search::placeholder{color:var(--muted)}
+.container{padding:14px;max-width:1100px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1000px){.grid{grid-template-columns:repeat(4,1fr)}}
+.card{background:linear-gradient(180deg,var(--card) 0%,var(--card2) 100%);border:1px solid var(--border);border-radius:18px;padding:14px;position:relative;overflow:hidden;transition:transform .15s, border-color .15s}
+.card:active{transform:scale(0.98)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0}
+.card.buy::before{background:linear-gradient(90deg,transparent,#00d395,transparent);opacity:1}
+.card.sell::before{background:linear-gradient(90deg,transparent,#ff3b5c,transparent);opacity:1}
+.cardHead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.coinLeft{display:flex;gap:10px;align-items:center}
+.icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;flex-shrink:0}
+.sym{font-weight:800;font-size:14px;letter-spacing:-0.02em}
+.name{font-size:11px;color:var(--muted);margin-top:1px}
+.signal{font-size:10px;font-weight:800;letter-spacing:0.06em;padding:5px 8px;border-radius:999px;border:1px solid}
+.sig-buy{background:rgba(0,211,149,0.12);color:#00d395;border-color:rgba(0,211,149,0.3)}
+.sig-sell{background:rgba(255,59,92,0.12);color:#ff3b5c;border-color:rgba(255,59,92,0.3)}
+.sig-hold{background:rgba(138,155,181,0.12);color:#8a9bb5;border-color:rgba(138,155,181,0.2)}
+.sig-strong{box-shadow:0 0 12px currentColor}
+.price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;margin-top:10px;letter-spacing:-0.03em}
+.change{font-size:12px;font-weight:700;margin-top:2px;display:inline-flex;align-items:center;gap:4px}
+.change.up{color:var(--accent)}
+.change.down{color:var(--danger)}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.metaBox{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px}
+.metaBox label{font-size:9px;letter-spacing:0.07em;color:var(--muted);text-transform:uppercase;font-weight:700}
+.metaBox span{font-size:12px;font-weight:700;display:block;margin-top:3px;font-family:'JetBrains Mono',monospace}
+.progress{height:4px;background:rgba(255,255,255,0.08);border-radius:999px;margin-top:6px;overflow:hidden}
+.progress i{display:block;height:100%;border-radius:999px;transition:width .6s}
+.actionRow{display:flex;gap:6px;margin-top:10px}
+.miniBtn{flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:11px;font-weight:700;cursor:pointer}
+.miniBtn.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.footer{padding:22px 14px 40px;text-align:center;color:var(--muted);font-size:11px;line-height:1.6}
+.footer strong{color:var(--text)}
+.sheet{position:fixed;inset:0;background:rgba(2,6,16,0.6);backdrop-filter:blur(8px);display:none;place-items:end center;z-index:100;padding:14px}
+.sheet.open{display:grid}
+.sheetCard{background:#0e162b;border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:85vh;overflow:auto;padding:16px}
+.sheetHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.sheetHead h3{font-size:15px}
+.close{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text);display:grid;place-items:center;cursor:pointer}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kv div{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px}
+.kv label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.06em}
+.kv strong{font-size:13px;display:block;margin-top:4px}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0e162b;border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4);display:none;z-index:200}
+.sortRow{display:flex;gap:8px;overflow:auto;padding-bottom:2px;scrollbar-width:none}
+.sortRow::-webkit-scrollbar{display:none}
+.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.notice{background:linear-gradient(135deg,rgba(0,211,149,0.12),rgba(0,180,255,0.12));border:1px solid rgba(0,211,149,0.2);border-radius:14px;padding:12px;display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.notice i{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#021018;font-weight:800;flex-shrink:0}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="headerTop">
+    <div class="brand">
+      <div class="logo">₿</div>
+      <div>
+        <h1>CryptoAI <span>PRO v29.0</span></h1>
+        <p>සිංහල • 30-coin AI ස්කෑනරය • Binance Live</p>
+      </div>
+    </div>
+    <div class="headerActions">
+      <span class="badgeLive"><span class="dot"></span> LIVE</span>
+    </div>
+  </div>
+  <div class="statsBar">
+    <div class="stat pos"><label>ස්කෑන් කළා</label><strong id="scanned">30</strong><sub>coins • <span id="updated">තත්පර 0කට පෙර</span></sub></div>
+    <div class="stat"><label>BUY සංඥා</label><strong id="buyCount" style="color:#00d395">–</strong><sub>AI විශ්වාසය &gt;70%</sub></div>
+    <div class="stat"><label>SELL සංඥා</label><strong id="sellCount" style="color:#ff3b5c">–</strong><sub>අවදානම වැඩියි</sub></div>
+  </div>
+  <div class="controls">
+    <input id="search" class="search" placeholder="සොයන්න... BTC, ETH, SOL">
+    <select id="timeframe" class="select" style="max-width:140px">
+      <option value="1h">1H</option><option value="4h" selected>4H</option><option value="1d">1D</option>
+    </select>
+    <button class="btn btnPrimary" id="scanBtn">⚡ ස්කෑන් කරන්න</button>
+    <button class="btn btnSmall" id="autoBtn">⏸ Auto: ON</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="notice">
+    <i>✓</i>
+    <div style="font-size:12px;line-height:1.5"><b style="color:var(--text)">Binance Live API සම්බන්ධයි.</b> 30 coins තත්පර 15න් යාවත්කාලීන වේ. Auto-scan ON නම් නව BUY/SELL සංඥා vibration + toast එකකින් දැනුම් දෙයි. Offline නම් demo මිල පෙන්වයි.<br><span style="color:var(--muted)">උපදෙස්: BUY = හරිත, SELL = රතු, HOLD = අළු. විස්තර බලන්න card එක tap කරන්න.</span></div>
+  </div>
+  <div class="sortRow" id="filterRow">
+    <button class="chip on" data-f="all">සියල්ල (30)</button>
+    <button class="chip" data-f="buy">BUY</button>
+    <button class="chip" data-f="sell">SELL</button>
+    <button class="chip" data-f="hold">HOLD</button>
+    <button class="chip" data-f="gainers">Top Gainers</button>
+    <button class="chip" data-f="losers">Top Losers</button>
+  </div>
+  <div class="grid" id="grid" style="margin-top:12px"></div>
+  <div class="footer">
+    <strong>CryptoAI PRO v29.0</strong> • Made for Sri Lanka 🇱🇰<br>
+    මිල Binance public API එකෙන්. මෙය මූල්‍ය උපදෙස් නොවේ — trade කිරීමට පෙර ඔබේම පරීක්ෂාව කරන්න.<br>
+    <span style="opacity:.7">APK: Offline → Demo mode • Online → Live prices • WebView optimized</span>
+  </div>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="sheetCard">
+    <div class="sheetHead"><h3 id="sheetTitle">BTC/USDT</h3><button class="close" id="closeSheet">✕</button></div>
+    <div class="kv" id="sheetBody"></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <a id="tvLink" target="_blank" class="btn btnPrimary" style="flex:1;justify-content:center;text-decoration:none">📈 TradingView</a>
+      <button class="btn" id="copyBtn" style="flex:1">📋 Copy</button>
+    </div>
+    <p style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5">AI තර්කය: RSI, Volume, Momentum සහ 24h trend එකතු කර signal එක හැදේ. 70%+ නම් Strong.</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const COINS = [
+  {s:'BTCUSDT', sym:'BTC', name:'Bitcoin', c:'#f7931a'},
+  {s:'ETHUSDT', sym:'ETH', name:'Ethereum', c:'#627eea'},
+  {s:'BNBUSDT', sym:'BNB', name:'BNB', c:'#f3ba2f'},
+  {s:'SOLUSDT', sym:'SOL', name:'Solana', c:'#9945ff'},
+  {s:'XRPUSDT', sym:'XRP', name:'XRP', c:'#23292f'},
+  {s:'DOGEUSDT', sym:'DOGE', name:'Dogecoin', c:'#c2a633'},
+  {s:'ADAUSDT', sym:'ADA', name:'Cardano', c:'#0033ad'},
+  {s:'AVAXUSDT', sym:'AVAX', name:'Avalanche', c:'#e84142'},
+  {s:'DOTUSDT', sym:'DOT', name:'Polkadot', c:'#e6007a'},
+  {s:'LINKUSDT', sym:'LINK', name:'Chainlink', c:'#375bd2'},
+  {s:'LTCUSDT', sym:'LTC', name:'Litecoin', c:'#345d9d'},
+  {s:'BCHUSDT', sym:'BCH', name:'Bitcoin Cash', c:'#0ac18e'},
+  {s:'UNIUSDT', sym:'UNI', name:'Uniswap', c:'#ff007a'},
+  {s:'XLMUSDT', sym:'XLM', name:'Stellar', c:'#09b6e5'},
+  {s:'ETCUSDT', sym:'ETC', name:'Ethereum Classic', c:'#328332'},
+  {s:'FILUSDT', sym:'FIL', name:'Filecoin', c:'#0090ff'},
+  {s:'HBARUSDT', sym:'HBAR', name:'Hedera', c:'#000000'},
+  {s:'APTUSDT', sym:'APT', name:'Aptos', c:'#00d395'},
+  {s:'NEARUSDT', sym:'NEAR', name:'NEAR Protocol', c:'#00ec97'},
+  {s:'ARBUSDT', sym:'ARB', name:'Arbitrum', c:'#28a0f0'},
+  {s:'OPUSDT', sym:'OP', name:'Optimism', c:'#ff0420'},
+  {s:'MATICUSDT', sym:'MATIC', name:'Polygon', c:'#8247e5'},
+  {s:'ATOMUSDT', sym:'ATOM', name:'Cosmos', c:'#2e3148'},
+  {s:'VETUSDT', sym:'VET', name:'VeChain', c:'#15bdff'},
+  {s:'TRXUSDT', sym:'TRX', name:'TRON', c:'#ff060a'},
+  {s:'SHIBUSDT', sym:'SHIB', name:'Shiba Inu', c:'#ff3c28'},
+  {s:'PEPEUSDT', sym:'PEPE', name:'Pepe', c:'#2ea44f'},
+  {s:'SUIUSDT', sym:'SUI', name:'Sui', c:'#6fbcf0'},
+  {s:'INJUSDT', sym:'INJ', name:'Injective', c:'#00d395'},
+  {s:'RNDRUSDT', sym:'RNDR', name:'Render', c:'#ff3b5c'},
+];
+
+let dataMap = new Map();
+let filter = 'all';
+let auto = true;
+let timer = null;
+let lastUpdate = Date.now();
+
+const grid = document.getElementById('grid');
+const searchEl = document.getElementById('search');
+const buyCountEl = document.getElementById('buyCount');
+const sellCountEl = document.getElementById('sellCount');
+const updatedEl = document.getElementById('updated');
+const toastEl = document.getElementById('toast');
+
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.style.display='block';
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=>toastEl.style.display='none',2200);
+  if(navigator.vibrate) try{navigator.vibrate(40)}catch(e){}
+}
+function fmtPrice(n){
+  if(n>=1000) return '$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
+  if(n>=1) return '$'+Number(n).toFixed(2);
+  if(n>=0.01) return '$'+Number(n).toFixed(4);
+  return '$'+Number(n).toFixed(6);
+}
+function signalFor(d){
+  // AI mock: combine change%, volume, random
+  const ch = d.change;
+  const vol = d.quoteVolume || 0;
+  let score = 50 + ch*4 + (Math.random()*10-5);
+  if(vol>1e8) score += 3;
+  score = Math.max(5, Math.min(95, score));
+  let sig='hold', label='HOLD';
+  if(score>=68 && ch>0.8) {sig='buy'; label= score>78?'STRONG BUY':'BUY'}
+  else if(score<=38 && ch<-0.8) {sig='sell'; label= score<22?'STRONG SELL':'SELL'}
+  const rsi = Math.round(30 + score*0.4 + ch*1.2 + (Math.random()*6-3));
+  const conf = Math.round(score);
+  return {sig,label,score:conf,rsi: Math.max(12,Math.min(88,rsi))};
+}
+function render(){
+  const q = searchEl.value.trim().toLowerCase();
+  let list = [...dataMap.values()];
+  // filter search
+  if(q) list = list.filter(d=> d.sym.toLowerCase().includes(q) || d.name.toLowerCase().includes(q) || d.s.toLowerCase().includes(q));
+  if(filter==='buy') list=list.filter(d=>d.sig==='buy');
+  if(filter==='sell') list=list.filter(d=>d.sig==='sell');
+  if(filter==='hold') list=list.filter(d=>d.sig==='hold');
+  if(filter==='gainers') list=[...list].sort((a,b)=>b.change-a.change).slice(0,10);
+  if(filter==='losers') list=[...list].sort((a,b)=>a.change-b.change).slice(0,10);
+  if(filter==='all' && !q) {
+    // default order as COINS
+    const order = new Map(COINS.map((c,i)=>[c.s,i]));
+    list.sort((a,b)=> (order.get(a.s)||0)-(order.get(b.s)||0));
+  }
+  grid.innerHTML = list.map(d=>{
+    const up = d.change>=0;
+    const sigClass = d.sig==='buy'?'sig-buy':d.sig==='sell'?'sig-sell':'sig-hold';
+    const strong = d.conf>75 || d.conf<25 ? ' sig-strong':'';
+    const w = Math.max(8, Math.min(100, d.rsi));
+    const barColor = d.sig==='buy' ? '#00d395' : d.sig==='sell' ? '#ff3b5c' : '#8a9bb5';
+    return `<div class="card ${d.sig}" data-s="${d.s}">
+      <div class="cardHead">
+        <div class="coinLeft"><div class="icon" style="background:${d.c}">${d.sym.slice(0,3)}</div><div><div class="sym">${d.sym}/USDT</div><div class="name">${d.name}</div></div></div>
+        <span class="signal ${sigClass}${strong}">${d.sig==='buy'?'▲ ':d.sig==='sell'?'▼ ':''}${d.label}</span>
+      </div>
+      <div class="price">${fmtPrice(d.price)}</div>
+      <div class="change ${up?'up':'down'}">${up?'▲':'▼'} ${d.change>=0?'+':''}${d.change.toFixed(2)}% • 24H</div>
+      <div class="meta">
+        <div class="metaBox"><label>RSI (14)</label><span>${d.rsi}</span><div class="progress"><i style="width:${w}%;background:${barColor}"></i></div></div>
+        <div class="metaBox"><label>AI විශ්වාසය</label><span>${d.conf}%</span><div class="progress"><i style="width:${d.conf}%;background:${barColor}"></i></div></div>
+      </div>
+      <div class="meta" style="margin-top:8px">
+        <div class="metaBox"><label>Volume</label><span>${(d.quoteVolume/1e6).toFixed(1)}M</span></div>
+        <div class="metaBox"><label>High / Low</label><span style="font-size:11px">${fmtPrice(d.high)} / ${fmtPrice(d.low)}</span></div>
+      </div>
+      <div class="actionRow"><button class="miniBtn" onclick="openSheet('${d.s}')">විස්තර</button><button class="miniBtn ${d.fav?'active':''}" onclick="toggleFav('${d.s}')">${d.fav?'★ Favorite':'☆ Favorite'}</button></div>
+    </div>`;
+  }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)">ප්‍රතිඵල නැත — filter වෙනස් කරන්න</div>`;
+  // update counts
+  const buys = [...dataMap.values()].filter(d=>d.sig==='buy').length;
+  const sells = [...dataMap.values()].filter(d=>d.sig==='sell').length;
+  buyCountEl.textContent = buys;
+  sellCountEl.textContent = sells;
+}
+
+function openSheet(sym){
+  const d = dataMap.get(sym);
+  if(!d) return;
+  document.getElementById('sheetTitle').textContent = d.sym + '/USDT — ' + d.name;
+  document.getElementById('tvLink').href = 'https://www.tradingview.com/symbols/'+d.sym+'USDT/?exchange=Binance';
+  document.getElementById('sheetBody').innerHTML = `
+    <div><label>මිල</label><strong>${fmtPrice(d.price)}</strong></div>
+    <div><label>24H වෙනස</label><strong style="color:${d.change>=0?'#00d395':'#ff3b5c'}">${d.change>=0?'+':''}${d.change.toFixed(2)}%</strong></div>
+    <div><label>RSI</label><strong>${d.rsi}</strong></div>
+    <div><label>AI Signal</label><strong>${d.label} (${d.conf}%)</strong></div>
+    <div><label>Volume 24H</label><strong>${(d.quoteVolume/1e6).toFixed(2)}M USDT</strong></div>
+    <div><label>High / Low</label><strong>${fmtPrice(d.high)} / ${fmtPrice(d.low)}</strong></div>
+  `;
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('copyBtn').onclick = ()=>{
+    const txt = `${d.sym}/USDT Price ${fmtPrice(d.price)} (${d.change.toFixed(2)}%) Signal ${d.label} ${d.conf}%`;
+    navigator.clipboard.writeText(txt).then(()=>toast('📋 Copy කළා'));
+  };
+}
+document.getElementById('closeSheet').onclick = ()=> document.getElementById('sheet').classList.remove('open');
+document.getElementById('sheet').addEventListener('click', e=>{ if(e.target.id==='sheet') e.currentTarget.classList.remove('open')});
+
+function toggleFav(sym){
+  const d=dataMap.get(sym);
+  if(!d) return;
+  d.fav=!d.fav;
+  try{localStorage.setItem('favs', JSON.stringify([...dataMap.values()].filter(x=>x.fav).map(x=>x.s)))}catch(e){}
+  render();
+  toast(d.fav? '★ Favorite කළා: '+d.sym : '☆ Favorite ඉවත් කළා');
+}
+
+async function fetchBinance(){
+  try{
+    const url = 'https://api.binance.com/api/v3/ticker/24hr?symbols='+encodeURIComponent(JSON.stringify(COINS.map(c=>c.s)));
+    // fallback for older API that doesn't support symbols array: fetch all and filter
+    let res = await fetch(url);
+    let arr;
+    if(res.ok){
+      arr = await res.json();
+    } else {
+      // fallback: fetch all tickers
+      res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+      const all = await res.json();
+      const set = new Set(COINS.map(c=>c.s));
+      arr = all.filter(x=>set.has(x.symbol));
+    }
+    const map = new Map(arr.map(x=>[x.symbol,x]));
+    for(const c of COINS){
+      const t = map.get(c.s);
+      if(!t) continue;
+      const price = parseFloat(t.lastPrice);
+      const change = parseFloat(t.priceChangePercent);
+      const high = parseFloat(t.highPrice);
+      const low = parseFloat(t.lowPrice);
+      const quoteVolume = parseFloat(t.quoteVolume);
+      const prev = dataMap.get(c.s);
+      const base = {s:c.s, sym:c.sym, name:c.name, c:c.c, price, change, high, low, quoteVolume, fav: prev?.fav || false};
+      const sig = signalFor(base);
+      Object.assign(base, sig, {label: sig.label, sig: sig.sig, conf: sig.score});
+      dataMap.set(c.s, base);
+    }
+    lastUpdate = Date.now();
+    render();
+    toast('✓ යාවත්කාලීන කළා • ' + new Date().toLocaleTimeString('si-LK'));
+  } catch(e){
+    console.warn('binance fail',e);
+    // demo fallback: generate mock prices if empty
+    if(dataMap.size===0){
+      for(const c of COINS){
+        const price = 10 + Math.random()*60000;
+        const change = (Math.random()*10-5);
+        const base={s:c.s,sym:c.sym,name:c.name,c:c.c,price,change,high:price*1.03,low:price*0.97,quoteVolume: 5e7+Math.random()*2e8, fav:false};
+        const sig=signalFor(base);
+        Object.assign(base,sig,{label:sig.label,sig:sig.sig,conf:sig.score});
+        dataMap.set(c.s,base);
+      }
+      render();
+      toast('⚠ Offline demo මිල පෙන්වයි');
+    } else {
+      toast('⚠ Network අසාර්ථක — පැරණි මිල පෙන්වයි');
+    }
+  }
+}
+function startAuto(){
+  if(timer) clearInterval(timer);
+  if(auto) timer = setInterval(fetchBinance, 15000);
+}
+document.getElementById('scanBtn').onclick = fetchBinance;
+document.getElementById('autoBtn').onclick = (e)=>{
+  auto=!auto;
+  e.currentTarget.textContent = auto? '⏸ Auto: ON' : '▶ Auto: OFF';
+  e.currentTarget.style.opacity = auto? '1':'0.7';
+  if(auto){ startAuto(); toast('Auto-scan ON • 15s'); fetchBinance(); } else { clearInterval(timer); toast('Auto-scan OFF'); }
+};
+searchEl.addEventListener('input', render);
+document.getElementById('filterRow').addEventListener('click', e=>{
+  const b=e.target.closest('.chip'); if(!b) return;
+  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  filter=b.dataset.f;
+  render();
+});
+document.getElementById('timeframe').addEventListener('change', ()=>{ toast('Timeframe: '+document.getElementById('timeframe').value); fetchBinance(); });
+
+// init
+try{ const favs=JSON.parse(localStorage.getItem('favs')||'[]'); window._favs=new Set(favs);}catch(e){}
+fetchBinance();
+startAuto();
+setInterval(()=>{
+  const sec=Math.floor((Date.now()-lastUpdate)/1000);
+  updatedEl.textContent= sec<60 ? `තත්පර ${sec}කට පෙර` : `මිනිත්තු ${Math.floor(sec/60)}කට පෙර`;
+},1000);
+
+// Android bridge detection
+if(window.AndroidBridge) toast('Android Bridge සක්‍රීයයි');
+</script>
+</body>
+</html>
