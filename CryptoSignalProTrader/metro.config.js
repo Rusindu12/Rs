@@ -1,0 +1,8 @@
+const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+
+config.resolver.assetExts.push('mp3', 'wav', 'ogg');
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'ts', 'tsx'];
+
+module.exports = config;
